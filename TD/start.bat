@@ -1,11 +1,6 @@
 rem turn off echo
 @echo off
 
-IF EXIST "dep" (
-  echo "dep exists"
-) ELSE (
-  CALL install-deps.cmd
-)
 
 IF EXIST ".env" (
   echo ".env exists"
