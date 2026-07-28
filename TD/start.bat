@@ -37,17 +37,17 @@ IF EXIST %TOUCHPATH% (
   set TOUCHPATH="%TOUCHDIR%%TOUCHEXE%"
 )
 
-:: BEGIN ENV VARIABLES 
-set MODE=dev
-set assets_path=assets\
+@REM :: BEGIN ENV VARIABLES 
+@REM set MODE=dev
+@REM set assets_path=assets\
 
-set status_view_monitor_index=0
-:: Monitor index should be set based on which touch monitor you want to use
-set monitor_index=1
-set blackmagic_camera_index=0
-set takeaways_render_dir=C:\Users\vvox\Documents\GitHub\CADI-USOPEN-PHOTOBOOTH\TD\assets\takeaway\
-set dante_channels=1:Dante_tx_1,2:Dante_tx_2
-set photobooth_id=1
+@REM set status_view_monitor_index=0
+@REM :: Monitor index should be set based on which touch monitor you want to use
+@REM set monitor_index=1
+@REM set blackmagic_camera_index=0
+@REM set takeaways_render_dir=C:\Users\vvox\Documents\GitHub\CADI-USOPEN-PHOTOBOOTH\TD\assets\takeaway\
+@REM set dante_channels=1:Dante_tx_1,2:Dante_tx_2
+@REM set photobooth_id=1
 
 :: start our project file with the target TD installation
 start "" %TOUCHPATH% %TOEFILE%

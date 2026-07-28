@@ -1,6 +1,6 @@
 # pylint: disable=missing-docstring,logging-fstring-interpolation
 from vvox_tdtools.base import BaseEXT
-# from vvox_tdtools.parhelper import ParTemplate
+from vvox_tdtools.parhelper import ParTemplate
 try:
     # import td
     from td import OP # type: ignore
@@ -16,6 +16,7 @@ class StateManagerEXT(BaseEXT):
     def __init__(self, myop: OP) -> None:
         BaseEXT.__init__(self, myop, par_callback_on=True)
         self._createControlsPage()
+        self.Me.par.opshortcut = "state_manager"
         pass
 
     def OnInit(self):
@@ -24,9 +25,15 @@ class StateManagerEXT(BaseEXT):
 
     # Below is an example of a parameter callback. Simply create a method that starts with "_on" and then the name of the parameter.
 
-    # def _onExampletoggle(self, par):
-    #     self.Logger.debug(f"_onExampleToggle - val: {par.eval()}")
-    #     pass
+    def _onStartphotobooth(self, par):
+        self.Logger.debug(f"_onExampleToggle - val: {par.eval()}")
+        op.camera_control.par.Startcountdown.pulse()
+        op.poster_control.par.Recordtakeaway.pulse()
+        pass
+
+    def StartRobot(self):
+        self.Me.op("oscout1").sendOSC("/remote", ["op.animation_player.par.Play.pulse()"])
+        pass
 
     # Below is an example of creating an event loop by overriding the OnFrameStart method.
 
@@ -43,7 +50,7 @@ class StateManagerEXT(BaseEXT):
     def _createControlsPage(self) -> None:
         page = self.GetPage('Controls')
         pars = [
-            # ParTemplate('Example Toggle', par_type='Toggle', label='Example Label'),
+            ParTemplate('StartPhotobooth', par_type='Pulse', label='StartPhotobooth'),
 
         ]
         for par in pars:

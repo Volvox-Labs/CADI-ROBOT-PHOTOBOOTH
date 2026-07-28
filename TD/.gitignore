@@ -1,5 +1,5 @@
 dep/_module_import/*
-
+*sharable*
 # vscode pieces
 # .vscode/*
 *.mov

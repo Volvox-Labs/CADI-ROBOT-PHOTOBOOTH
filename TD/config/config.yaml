@@ -1,16 +1,19 @@
 ---
 vars:
   mode: ${MODE}
+  assets_path: ${ASSETS_PATH}
 
 default:
   td:
     project:
-      performOnStart: True
+      performOnStart: False
     ui:
-      performMode: True
+      performMode: False
   vars:
-    RESX: 2160
-    RESY: 3840
+    assets: D:\Cadi2026\assets\
+    takeaways_render_dir: D:\Cadi2026\takeaway\renders\
+    RESX: 1920 
+    RESY: 1080
     headless: False
   ops:
     '/project1/output':

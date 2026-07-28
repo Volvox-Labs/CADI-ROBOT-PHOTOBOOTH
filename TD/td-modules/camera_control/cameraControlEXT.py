@@ -19,7 +19,7 @@ class CameraControlEXT(BaseEXT):
         self.Me.par.opshortcut = 'camera_control'
         self._createControlsPage()
 
-        self.info_chop = self.Me.op("info_b1") if int(root.var("blackmagic_camera_index")) == 0 else self.Me.op("info_b2")
+        self.info_chop = self.Me.op("info_b1")
         pass
 
     def OnInit(self):
@@ -43,12 +43,21 @@ class CameraControlEXT(BaseEXT):
         # This method should handle the camera feed capture logic
         self.Logger.debug('Capturing camera feed...')
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"capture_{timestamp}.png"
+        filename = f"capture_{timestamp}.mov"
         op("camera_capture").par.file = self.Me.par.Outputpath + filename
         self.Logger.debug(f"Saving camera feed to {filename}")
-        op("camera_capture").par.addframe.pulse()
+        # op("camera_capture").par.addframe.pulse()
+        self.Me.op("recording_timer").par.start.pulse()
         # Implement the logic to capture the camera feed here
         pass
+
+    def HandleRecordingComplete(self):
+        print('hereee done ')
+        pass
+
+    def _onStartcountdown(self):
+        self.Me.op("CountDownTimer").par.start.pulse()
+
 
     def _createControlsPage(self) -> None:
         page = self.GetPage('Controls')
@@ -59,6 +68,8 @@ class CameraControlEXT(BaseEXT):
             ParTemplate('CaptureCameraFeed', par_type='Pulse', label='CaptureCameraFeed'),
             ParTemplate("OutputPath", par_type='Folder', label='OutputPath'),
             ParTemplate("UseTestCapture", par_type='Toggle', label='UseTestCapture'),
+            ParTemplate("CaptureLength",par_type="Int",label="CaptureLength"),
+            ParTemplate('StartCountdown', par_type='Pulse', label='StartCountdown'),
             camera_connected
         ]
         for par in pars:
