@@ -70,6 +70,7 @@ class CameraControlEXT(BaseEXT):
             ParTemplate("UseTestCapture", par_type='Toggle', label='UseTestCapture'),
             ParTemplate("CaptureLength",par_type="Int",label="CaptureLength"),
             ParTemplate('StartCountdown', par_type='Pulse', label='StartCountdown'),
+            ParTemplate("TriggerFrame", par_type="Int",label="TriggerFrame"),
             camera_connected
         ]
         for par in pars:

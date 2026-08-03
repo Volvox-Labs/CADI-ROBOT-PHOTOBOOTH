@@ -12,11 +12,10 @@ except ModuleNotFoundError:
     # from tdconfig import TDFunctions as TDF
 
 
-class StateManagerEXT(BaseEXT):
+class LedOutputEXT(BaseEXT):
     def __init__(self, myop: OP) -> None:
         BaseEXT.__init__(self, myop, par_callback_on=True)
         self._createControlsPage()
-        self.Me.par.opshortcut = "state_manager"
         pass
 
     def OnInit(self):
@@ -25,30 +24,10 @@ class StateManagerEXT(BaseEXT):
 
     # Below is an example of a parameter callback. Simply create a method that starts with "_on" and then the name of the parameter.
 
-    def _onStartphotobooth(self, par):
-        self.Logger.debug(f"_onExampleToggle - val: {par.eval()}")
-        op.camera_control.par.Startcountdown.pulse()
-        op.poster_control.par.Recordtakeaway.pulse()
-        pass
+    # def _onExampletoggle(self, par):
+    #     self.Logger.debug(f"_onExampleToggle - val: {par.eval()}")
+    #     pass
 
-    def StartRobot(self):
-        #standard 3 
-        
-        # self.Me.op("oscout1").sendOSC("/remote", ["op.animation_player.par.Play.pulse()"])
-        self.Me.op("oscout1").sendOSC("/remote", ["op.animation_player.par.Play.pulse()"])
-        pass
-
-    def _onHeight(self,par):
-        if (par) == "Standard":
-            val = 3
-        elif par == "Low":
-            val = 2
-        else:
-            val = 1
-        print(val)
-        self.Me.op("oscout1").sendOSC("/remote" , [f'setattr(op.animation_player.par,"Animationindex",{val})'])
-        self.Me.op("oscout1").sendOSC("/remote", ["op.animation_player.par.Gotofirstframe.pulse()"])
-        pass
     # Below is an example of creating an event loop by overriding the OnFrameStart method.
 
     # def OnFrameStart(self, frame: int):
@@ -64,7 +43,7 @@ class StateManagerEXT(BaseEXT):
     def _createControlsPage(self) -> None:
         page = self.GetPage('Controls')
         pars = [
-            ParTemplate('StartPhotobooth', par_type='Pulse', label='StartPhotobooth'),
+            ParTemplate('EnableLEDs', par_type='Toggle', label='Enable LEDs'),
 
         ]
         for par in pars:
