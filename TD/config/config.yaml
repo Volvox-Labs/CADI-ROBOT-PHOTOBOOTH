@@ -2,6 +2,7 @@
 vars:
   mode: ${MODE}
   assets_path: ${ASSETS_PATH}
+  data_dir: ${DATA_DIR}
 
 default:
   td:
@@ -10,8 +11,7 @@ default:
     ui:
       performMode: False
   vars:
-    assets: D:\Cadi2026\assets\
-    takeaways_render_dir: D:\Cadi2026\takeaway\renders\
+    assets: ${ASSETS_PATH}
     RESX: 1920 
     RESY: 1080
     headless: False

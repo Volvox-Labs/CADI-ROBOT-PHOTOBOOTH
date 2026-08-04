@@ -7,16 +7,16 @@ import requests
 import segno
 import json, os, datetime
 
-MANIFEST_DIR = r"D:\Cadi2026\takeaway\manifests"
+MANIFEST_DIR = os.path.join(root.var("data_dir"), "manifests")
 BASE_URL = "https://ingest.curatorlive.com/upload"
 MICROSITE_URL = "https://share.curatorlive.com/"
 EVENT_CODE = "QFSVY8"
 FFMPEG_PATH = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"
 # AUTH_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiOTRlMjg5NWNhOGFmZWVjN2YyMjBkMWQ1ODI2OWU2YzY0YzVmNWEzN2RmOGZmZmZjN2MyYzk2ZjBkNDFlOTgwMTc4NjRjZDg0M2YwYzEwOWYiLCJpYXQiOjE3NTM0NzgxNDcuNjUxNDU5LCJuYmYiOjE3NTM0NzgxNDcuNjUxNDYsImV4cCI6MTc4NTAxNDE0Ny42MzI0OTksInN1YiI6IjE0MjQ1Iiwic2NvcGVzIjpbImFwaSIsInJlYWQtZXZlbnRzIiwidXBsb2FkIl19.OQ5-Fz_1q-npufiyaV76PboSt6R-o8YXDSG3Hj-1iw1Zfo16iBYBsaO8THDhMikQ4QXD5s3zTXMvl-lkAY_IJiSqfrPEYqItBKhskDD1d4fuWE6zotPDS51CizvnTuzapdoUow1ilEzbtPewoGjbAeBx8UpeIV_vjj25Hzns6V1yd68wCDoPLDX6t8BxH_l-Di9VBfVRiv3Fo8lx2ylAMs_EfyOGHDLToMqXvYgNoaNptUOh0JwtPdJyBrGanU2qic--kOsHA8eZszI2eIDspi61Rl8_PNuNCcSGbQvJ18GLNh1sm5T4STORKOtnNrgRun4Zt1yStsCrMvZBw7f7hOqsX4CvIc328BjzsHd1pZl7_dkpT1t-75xp9c_n-z9tVZN1ThNG2Vg0QEtAP9s-AUMBtYt2K-krYFLe1qU06y-ITH8aX1DR8bivMnDX70T9PSADggePKfN5OkK45FZSYnUYWtfkMuHdO04CRc7BepEvj2KsYPzJHDH7QX2OERO1mgIr1jkrn4YZx6hf6usqvWUK5nqToNxO6PiZNURS1gVCI7-WyeRBrdItZLs7UP_8LgpTEuLqDEe8YFFu4pzZPk-9fgyJ4kFpnfs3PKIJQD83HVlKP3wSDmfek1TZHH_c38k_69YBchMzElZ67Ty2A_W_Nnahc5_IQp4Nt2DL7FE"
 AUTH_TOKEN= "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiYWU2MmIwNzA2OWZmNmJiYzFmYjZjMmZmZmQ2ZTNkZTdlMzc2OWQzZjc1M2I0ODBlMjkwYjJiM2IxNzBhNGFlNzE3ZDliNTRjOTY2NjRiNWMiLCJpYXQiOjE3ODUxODc2NjguMzEwMjc1LCJuYmYiOjE3ODUxODc2NjguMzEwMjgyLCJleHAiOjE4MTY3MjM2NjguMTE2MDkxLCJzdWIiOiIxNDI0NSIsInNjb3BlcyI6WyJhcGkiLCJyZWFkLWV2ZW50cyIsInVwbG9hZCJdfQ.wfF5qeMLJTeisHncu_slpadwnR5IF8NYR5tazMiu0wqL5i-V-AsNbeZRR5mXiOng4IteW5z66bQOuuTogZtWi4i5rEglrPKgcX01kVizIjIaoukZl4VlxB-uEo0gnK4V5hd15wK7rJa2v_3iOkkD0T7-HdW5S083DVILt8uqjMllhZqO81_apT1OI7-xtJtjh9Gg_2QP4Q7fRRccrIY5HuKzzp-fJgRJOoJavv4XEp4NjgqzUnnT2jFummQm0gKB0POfK6bjnV1XnMzBFJ7rdiRCAqE47EQ08FnPyuMykt1pGpJboHHee8Igf1T_3Qw_OjkHwYI9gq1JH622YZuDlNoL-Wk3L2cZFabDguV0VSri0FjWrbTrLpgjbgzxzCKkbXZH2YWYKI-bOSzOJVavXBmNqkSm0Zz0TD6U89P5qDJYuVe_uDh-UPrWFbja4cW6U2nBieehN9RydUup6R5pN41F2opHtb6OED8bKDxDwy6hmqF2VlzImgO_F0vC8K0tU3OQXTqidFJWt-YXi6ZDPYaMANt6Syw31RdikwSXttP2MR-kjUpbksNUMUtXri2gTH--RPLArPOSypAIYdvEM2-JsgCsDVf9A02aUj6SQhT_UIekjWym_RVv5LlxY5RQDO02ZD0zPZP-jC_g-L7Gz13EWhRJY0Ja7BWKeu8lYkU"
-QR_CODE_DIR = r"D:\Cadi2026\takeaway\qr_code"
-PROCESSED_DIR = r"D:\Cadi2026\takeaway\processed"
-SCREENSHOT_DIR = r"D:\Cadi2026\takeaway\screenshots"
+QR_CODE_DIR = os.path.join(root.var("data_dir"), "qr_code")
+PROCESSED_DIR = os.path.join(root.var("data_dir"), "processed")
+SCREENSHOT_DIR = os.path.join(root.var("data_dir"), "screenshots")
 SCREENSHOT_FRAME = 300
 
 def _upload_video(video_file, timestamp):
@@ -87,7 +87,7 @@ def _extract_frame(video_path, output_path, frame_number=SCREENSHOT_FRAME):
 	return output_path
 
 
-def _process_and_upload(file_name):
+def _process_and_upload(file_name, playthrough_id=None):
 	if not file_name or not os.path.isfile(file_name):
 		return {"status": "video_upload_error", "message": f"File not found: {file_name}"}
 
@@ -133,7 +133,11 @@ def _process_and_upload(file_name):
 	takeaway_url = f"{MICROSITE_URL}/{EVENT_CODE}/{takeaway_id}"
 	qrcode = segno.make_qr(takeaway_url)
 	qrcode.save(qrcode_file_name, scale=20, border=2)
-	id = uuid.uuid4()
+	# Reuse the id the Operator app minted at capture time (threaded through via
+	# Setup()'s payload) so the Postgres `playthroughs` row this manifest fills in
+	# is the SAME row the operator already created, rather than an orphaned
+	# second row. Only falls back to a fresh uuid if that id is missing.
+	id = playthrough_id or uuid.uuid4()
 	print("Writing manifest")
 	write_manifest(str(id), output_file_name, qrcode_file_name, takeaway_url, screenshot_path)
 	return {"status": "video_upload_success", "qr_code_path": qrcode_file_name}
@@ -143,9 +147,13 @@ def Setup(tmClientExt: object) -> object:
 	"""
 	Runs on the main thread. Reads the file path off the upload_control COMP
 	(a plain TD object access) and returns it as a plain-data payload for RunInThread.
+	Also reads the current playthrough id off operator_bridge - set there from the
+	Operator app's capture_request/retake_capture websocket message - so RunInThread
+	can reuse it instead of minting a fresh, disconnected id.
 	"""
 	movie = op.upload_control.par.Filepath.eval()
-	return {"file_name": movie}
+	playthrough_id = op.operator_bridge.par.Currentplaythroughid.eval()
+	return {"file_name": movie, "playthrough_id": playthrough_id or None}
 
 
 def RunInThread(tmClientExt: object, payload: object) -> None:
@@ -154,7 +162,7 @@ def RunInThread(tmClientExt: object, payload: object) -> None:
 	(ffmpeg subprocess, HTTP upload, QR generation). Any raised exception is
 	caught by the ThreadManager and routed to OnExcept below.
 	"""
-	result = _process_and_upload(payload["file_name"])
+	result = _process_and_upload(payload["file_name"], payload.get("playthrough_id"))
 	tmClientExt.clientQueueManager.SetSuccessPayload(result)
 
 
