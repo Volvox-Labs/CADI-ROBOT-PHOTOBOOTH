@@ -7,8 +7,12 @@ import requests
 import segno
 import json, os, datetime
 
-MANIFEST_DIR = os.path.join(root.var("data_dir"), "manifests")
 BASE_URL = "https://ingest.curatorlive.com/upload"
+# Same public endpoint the browsers use (Operator app, kiosk-app/frontend).
+# PostgREST itself has no published port -- only cors-proxy does -- and TD
+# runs as a native Windows process outside the compose network, so it has to
+# go through the same published port everyone else does.
+POSTGREST_URL = "http://localhost:3000"
 MICROSITE_URL = "https://share.curatorlive.com/"
 EVENT_CODE = "QFSVY8"
 FFMPEG_PATH = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"
@@ -39,23 +43,32 @@ def _upload_video(video_file, timestamp):
 	except json.JSONDecodeError:
 		return {"result": "error", "error": "Invalid JSON response", "statusCode": response.status_code, "data": None, "response_body": response.text}
 
-def write_manifest(takeaway_id, video_path, qrcode_path, microsite_url, screenshot_path=None):
-    manifest = {
-        "id": takeaway_id,
+def _complete_playthrough(playthrough_id, video_path, qrcode_path, microsite_url, screenshot_path=None):
+    """Fills in the playthroughs row the Operator app already created (id +
+    created_at only) once processing/upload finishes. An upsert rather than a
+    plain PATCH: fills in the normal (Operator app already created the row)
+    case, but still creates a fresh row if playthrough_id was somehow missing
+    and _process_and_upload fell back to a brand-new uuid. created_at is
+    deliberately omitted so it's untouched on the merge path but still gets
+    its DEFAULT now() if this ends up creating a fresh row.
+    """
+    payload = {
+        "id": playthrough_id,
         "video_path": video_path.replace("\\", "/"),
         "qrcode_path": qrcode_path.replace("\\", "/"),
         "microsite_url": microsite_url,
-        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "ingested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     if screenshot_path:
-        manifest["screenshot_path"] = screenshot_path.replace("\\", "/")
+        payload["screenshot_path"] = screenshot_path.replace("\\", "/")
 
-    os.makedirs(MANIFEST_DIR, exist_ok=True)
-    final = os.path.join(MANIFEST_DIR, f"{takeaway_id}.json")
-    tmp = final + ".tmp"                      # not .json — invisible to the scanner
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(manifest, f)
-    os.replace(tmp, final)        	
+    response = requests.post(
+        f"{POSTGREST_URL}/playthroughs?on_conflict=id",
+        json=payload,
+        headers={"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"},
+        timeout=15,
+    )
+    response.raise_for_status()
 
 def _extract_frame(video_path, output_path, frame_number=SCREENSHOT_FRAME):
 	"""Grab a single frame as a PNG for the kiosk's operator gallery.
@@ -134,12 +147,12 @@ def _process_and_upload(file_name, playthrough_id=None):
 	qrcode = segno.make_qr(takeaway_url)
 	qrcode.save(qrcode_file_name, scale=20, border=2)
 	# Reuse the id the Operator app minted at capture time (threaded through via
-	# Setup()'s payload) so the Postgres `playthroughs` row this manifest fills in
-	# is the SAME row the operator already created, rather than an orphaned
-	# second row. Only falls back to a fresh uuid if that id is missing.
+	# Setup()'s payload) so the Postgres `playthroughs` row this completes is the
+	# SAME row the operator already created, rather than an orphaned second row.
+	# Only falls back to a fresh uuid if that id is missing.
 	id = playthrough_id or uuid.uuid4()
-	print("Writing manifest")
-	write_manifest(str(id), output_file_name, qrcode_file_name, takeaway_url, screenshot_path)
+	print("Completing playthrough", id)
+	_complete_playthrough(str(id), output_file_name, qrcode_file_name, takeaway_url, screenshot_path)
 	return {"status": "video_upload_success", "qr_code_path": qrcode_file_name}
 
 
