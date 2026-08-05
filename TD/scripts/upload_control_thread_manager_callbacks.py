@@ -12,7 +12,7 @@ BASE_URL = "https://ingest.curatorlive.com/upload"
 # PostgREST itself has no published port -- only cors-proxy does -- and TD
 # runs as a native Windows process outside the compose network, so it has to
 # go through the same published port everyone else does.
-POSTGREST_URL = "http://localhost:3000"
+POSTGREST_URL = root.var("postgrest_url")
 MICROSITE_URL = "https://share.curatorlive.com/"
 EVENT_CODE = "QFSVY8"
 FFMPEG_PATH = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"

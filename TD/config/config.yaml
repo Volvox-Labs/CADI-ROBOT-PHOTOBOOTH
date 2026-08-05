@@ -3,6 +3,7 @@ vars:
   mode: ${MODE}
   assets_path: ${ASSETS_PATH}
   data_dir: ${DATA_DIR}
+  postgrest_url: ${POSTGREST_URL}
 
 default:
   td:
