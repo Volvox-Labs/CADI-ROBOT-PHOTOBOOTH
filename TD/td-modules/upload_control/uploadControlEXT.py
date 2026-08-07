@@ -36,13 +36,7 @@ class UploadControlEXT(BaseEXT):
             return
         status = result.get("status")
         if status == "video_upload_success":
-            qr_code_path = result.get("qr_code_path")
-            if qr_code_path:
-                op.qrcode_scene.op("qrcode_file").par.file = qr_code_path
-                self.Logger.debug(f"QR code path: {qr_code_path}")
-                op.upload_control.par.Status = "complete"
-            else:
-                self.Logger.debug("No QR code path found in upload result")
+            self.Logger.debug("Video Upload Successful")
         elif status == "video_upload_error":
             op.upload_control.par.Status = "error"
             self.Logger.debug(f"Video upload failed: {result.get('message')}")

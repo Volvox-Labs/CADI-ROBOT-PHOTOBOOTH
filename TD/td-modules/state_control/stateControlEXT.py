@@ -41,8 +41,7 @@ class StateControlEXT(BaseEXT):
         self.Logger.debug("Retrying Experience")
         states = op.state_control.op("state_table")
         op.upload_control.par.Status = "inactive"
-        op.qrcode_scene.par.Showqrcode = 0
-        op.qrcode_scene.op("loading_bar").par.Initialize.pulse()
+
         op.loading_control.op("loading_bar").par.Initialize.pulse()
         for index, row in enumerate(states.rows()):
             if index > 2:

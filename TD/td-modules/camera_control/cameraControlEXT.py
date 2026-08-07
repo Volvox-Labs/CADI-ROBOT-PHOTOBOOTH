@@ -71,6 +71,7 @@ class CameraControlEXT(BaseEXT):
             ParTemplate("CaptureLength",par_type="Int",label="CaptureLength"),
             ParTemplate('StartCountdown', par_type='Pulse', label='StartCountdown'),
             ParTemplate("TriggerFrame", par_type="Int",label="TriggerFrame"),
+            ParTemplate("CountdownVolume",par_type="Float",label="CountdownVolume"),
             camera_connected
         ]
         for par in pars:
