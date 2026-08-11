@@ -21,7 +21,7 @@ AUTH_TOKEN= "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiYWU2Mm
 QR_CODE_DIR = os.path.join(root.var("data_dir"), "qr_code")
 PROCESSED_DIR = os.path.join(root.var("data_dir"), "processed")
 SCREENSHOT_DIR = os.path.join(root.var("data_dir"), "screenshots")
-SCREENSHOT_FRAME = 300
+SCREENSHOT_FRAME = 230
 
 def _upload_video(video_file, timestamp):
 	headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
