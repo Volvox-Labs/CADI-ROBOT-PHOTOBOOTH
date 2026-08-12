@@ -1,3 +1,5 @@
+contextVersion: 2
+createdByVersion: 1.4.3
 active: true
 mode: Python vEnv
 envName: vvox_td_py_env
@@ -5,4 +7,5 @@ installPath: .
 pythonVersion: '3.11'
 autoSetup: false
 autoSetupReqs: []
+autoSetupSyncReqs: false
 extraPaths: []
