@@ -88,7 +88,8 @@ class UploadControlEXT(BaseEXT):
         pars = [
             ParTemplate('UploadVideo', par_type='Pulse', label='UploadVideo'),
             status_par,
-            ParTemplate("FilePath",par_type="File",label="FilePath")
+            ParTemplate("FilePath",par_type="File",label="FilePath"),
+            ParTemplate("AudioFilePath",par_type="File", label="AudioFilePath")
 
         ]
         for par in pars:

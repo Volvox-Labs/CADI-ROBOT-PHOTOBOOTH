@@ -22,6 +22,7 @@ QR_CODE_DIR = os.path.join(root.var("data_dir"), "qr_code")
 PROCESSED_DIR = os.path.join(root.var("data_dir"), "processed")
 SCREENSHOT_DIR = os.path.join(root.var("data_dir"), "screenshots")
 SCREENSHOT_FRAME = 230
+AUDIO_FILE_PATH = r"C:\Users\VVOX_NUC_0724\Downloads\Cadi_Shareable_260810.wav"
 
 def _upload_video(video_file, timestamp):
 	headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -108,17 +109,34 @@ def _process_and_upload(file_name, playthrough_id=None):
 	qrcode_file_name = os.path.join(QR_CODE_DIR, f"{base_name}_qrcode.png")
 	output_file_name = os.path.join(PROCESSED_DIR, f"{base_name}_processed.mp4")
 	print("Processing file to",output_file_name)
-	ffmpeg_result = subprocess.run([
-		FFMPEG_PATH,
-		"-y",
-		"-i", file_name,
+
+	# Muxes the shareable audio track in on the same pass rather than a second
+	# ffmpeg call: a second -i for the audio, explicit -map so the output gets
+	# video from input 0 and audio from input 1 (drops whatever audio, if any,
+	# came in on the source clip), plus an audio codec since raw WAV doesn't
+	# belong in an MP4 - AAC does. -shortest caps the output at whichever of
+	# the two is shorter, so a length mismatch doesn't leave a silent tail or a
+	# frozen frame; drop it if you'd rather always keep the full video length.
+	has_audio = os.path.isfile(AUDIO_FILE_PATH)
+	if not has_audio:
+		print(f"WARNING: audio file not found at {AUDIO_FILE_PATH}, processing without it")
+
+	ffmpeg_cmd = [FFMPEG_PATH, "-y", "-i", file_name]
+	if has_audio:
+		ffmpeg_cmd += ["-i", AUDIO_FILE_PATH, "-map", "0:v:0", "-map", "1:a:0"]
+	ffmpeg_cmd += [
 		"-c:v", "libx264",
 		"-movflags", "+faststart",
 		"-pix_fmt", "yuv420p",
 		"-preset", "fast",
 		"-crf", "20",
-		output_file_name,
-	], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW, check=True)
+	]
+	if has_audio:
+		ffmpeg_cmd += ["-c:a", "aac", "-b:a", "192k", "-shortest"]
+	ffmpeg_cmd.append(output_file_name)
+
+	ffmpeg_result = subprocess.run(ffmpeg_cmd,
+		stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW, check=True)
 	if ffmpeg_result.returncode != 0:
 		ffmpeg_log = ffmpeg_result.stdout.decode(errors="replace")
 		print(f"ffmpeg failed ({ffmpeg_result.returncode}):\n{ffmpeg_log[-4000:]}")
@@ -166,7 +184,8 @@ def Setup(tmClientExt: object) -> object:
 	"""
 	movie = op.upload_control.par.Filepath.eval()
 	playthrough_id = op.operator_bridge.par.Currentplaythroughid.eval()
-	return {"file_name": movie, "playthrough_id": playthrough_id or None}
+	audio_file = op.upload_control.par.Audiofilepath.eval()
+	return {"file_name": movie, "audio_file_name": audio_file, "playthrough_id": playthrough_id or None}
 
 
 def RunInThread(tmClientExt: object, payload: object) -> None:
