@@ -22,7 +22,6 @@ QR_CODE_DIR = os.path.join(root.var("data_dir"), "qr_code")
 PROCESSED_DIR = os.path.join(root.var("data_dir"), "processed")
 SCREENSHOT_DIR = os.path.join(root.var("data_dir"), "screenshots")
 SCREENSHOT_FRAME = 230
-AUDIO_FILE_PATH = r"C:\Users\VVOX_NUC_0724\Downloads\Cadi_Shareable_260810.wav"
 
 def _upload_video(video_file, timestamp):
 	headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -101,7 +100,7 @@ def _extract_frame(video_path, output_path, frame_number=SCREENSHOT_FRAME):
 	return output_path
 
 
-def _process_and_upload(file_name, playthrough_id=None):
+def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	if not file_name or not os.path.isfile(file_name):
 		return {"status": "video_upload_error", "message": f"File not found: {file_name}"}
 
@@ -117,13 +116,13 @@ def _process_and_upload(file_name, playthrough_id=None):
 	# belong in an MP4 - AAC does. -shortest caps the output at whichever of
 	# the two is shorter, so a length mismatch doesn't leave a silent tail or a
 	# frozen frame; drop it if you'd rather always keep the full video length.
-	has_audio = os.path.isfile(AUDIO_FILE_PATH)
+	has_audio = os.path.isfile(audio_file_name)
 	if not has_audio:
-		print(f"WARNING: audio file not found at {AUDIO_FILE_PATH}, processing without it")
+		print(f"WARNING: audio file not found at {audio_file_name}, processing without it")
 
 	ffmpeg_cmd = [FFMPEG_PATH, "-y", "-i", file_name]
 	if has_audio:
-		ffmpeg_cmd += ["-i", AUDIO_FILE_PATH, "-map", "0:v:0", "-map", "1:a:0"]
+		ffmpeg_cmd += ["-i", audio_file_name, "-map", "0:v:0", "-map", "1:a:0"]
 	ffmpeg_cmd += [
 		"-c:v", "libx264",
 		"-movflags", "+faststart",
@@ -194,7 +193,7 @@ def RunInThread(tmClientExt: object, payload: object) -> None:
 	(ffmpeg subprocess, HTTP upload, QR generation). Any raised exception is
 	caught by the ThreadManager and routed to OnExcept below.
 	"""
-	result = _process_and_upload(payload["file_name"], payload.get("playthrough_id"))
+	result = _process_and_upload(payload["file_name"], payload.get("audio_file_name"), payload.get("playthrough_id"))
 	tmClientExt.clientQueueManager.SetSuccessPayload(result)
 
 
