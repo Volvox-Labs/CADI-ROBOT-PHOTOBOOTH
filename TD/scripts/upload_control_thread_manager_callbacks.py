@@ -16,12 +16,25 @@ POSTGREST_URL = root.var("postgrest_url")
 MICROSITE_URL = "https://share.curatorlive.com/"
 EVENT_CODE = "QFSVY8"
 FFMPEG_PATH = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"
+FFPROBE_PATH = FFMPEG_PATH.replace("ffmpeg.exe", "ffprobe.exe")
 # AUTH_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiOTRlMjg5NWNhOGFmZWVjN2YyMjBkMWQ1ODI2OWU2YzY0YzVmNWEzN2RmOGZmZmZjN2MyYzk2ZjBkNDFlOTgwMTc4NjRjZDg0M2YwYzEwOWYiLCJpYXQiOjE3NTM0NzgxNDcuNjUxNDU5LCJuYmYiOjE3NTM0NzgxNDcuNjUxNDYsImV4cCI6MTc4NTAxNDE0Ny42MzI0OTksInN1YiI6IjE0MjQ1Iiwic2NvcGVzIjpbImFwaSIsInJlYWQtZXZlbnRzIiwidXBsb2FkIl19.OQ5-Fz_1q-npufiyaV76PboSt6R-o8YXDSG3Hj-1iw1Zfo16iBYBsaO8THDhMikQ4QXD5s3zTXMvl-lkAY_IJiSqfrPEYqItBKhskDD1d4fuWE6zotPDS51CizvnTuzapdoUow1ilEzbtPewoGjbAeBx8UpeIV_vjj25Hzns6V1yd68wCDoPLDX6t8BxH_l-Di9VBfVRiv3Fo8lx2ylAMs_EfyOGHDLToMqXvYgNoaNptUOh0JwtPdJyBrGanU2qic--kOsHA8eZszI2eIDspi61Rl8_PNuNCcSGbQvJ18GLNh1sm5T4STORKOtnNrgRun4Zt1yStsCrMvZBw7f7hOqsX4CvIc328BjzsHd1pZl7_dkpT1t-75xp9c_n-z9tVZN1ThNG2Vg0QEtAP9s-AUMBtYt2K-krYFLe1qU06y-ITH8aX1DR8bivMnDX70T9PSADggePKfN5OkK45FZSYnUYWtfkMuHdO04CRc7BepEvj2KsYPzJHDH7QX2OERO1mgIr1jkrn4YZx6hf6usqvWUK5nqToNxO6PiZNURS1gVCI7-WyeRBrdItZLs7UP_8LgpTEuLqDEe8YFFu4pzZPk-9fgyJ4kFpnfs3PKIJQD83HVlKP3wSDmfek1TZHH_c38k_69YBchMzElZ67Ty2A_W_Nnahc5_IQp4Nt2DL7FE"
 AUTH_TOKEN= "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiYWU2MmIwNzA2OWZmNmJiYzFmYjZjMmZmZmQ2ZTNkZTdlMzc2OWQzZjc1M2I0ODBlMjkwYjJiM2IxNzBhNGFlNzE3ZDliNTRjOTY2NjRiNWMiLCJpYXQiOjE3ODUxODc2NjguMzEwMjc1LCJuYmYiOjE3ODUxODc2NjguMzEwMjgyLCJleHAiOjE4MTY3MjM2NjguMTE2MDkxLCJzdWIiOiIxNDI0NSIsInNjb3BlcyI6WyJhcGkiLCJyZWFkLWV2ZW50cyIsInVwbG9hZCJdfQ.wfF5qeMLJTeisHncu_slpadwnR5IF8NYR5tazMiu0wqL5i-V-AsNbeZRR5mXiOng4IteW5z66bQOuuTogZtWi4i5rEglrPKgcX01kVizIjIaoukZl4VlxB-uEo0gnK4V5hd15wK7rJa2v_3iOkkD0T7-HdW5S083DVILt8uqjMllhZqO81_apT1OI7-xtJtjh9Gg_2QP4Q7fRRccrIY5HuKzzp-fJgRJOoJavv4XEp4NjgqzUnnT2jFummQm0gKB0POfK6bjnV1XnMzBFJ7rdiRCAqE47EQ08FnPyuMykt1pGpJboHHee8Igf1T_3Qw_OjkHwYI9gq1JH622YZuDlNoL-Wk3L2cZFabDguV0VSri0FjWrbTrLpgjbgzxzCKkbXZH2YWYKI-bOSzOJVavXBmNqkSm0Zz0TD6U89P5qDJYuVe_uDh-UPrWFbja4cW6U2nBieehN9RydUup6R5pN41F2opHtb6OED8bKDxDwy6hmqF2VlzImgO_F0vC8K0tU3OQXTqidFJWt-YXi6ZDPYaMANt6Syw31RdikwSXttP2MR-kjUpbksNUMUtXri2gTH--RPLArPOSypAIYdvEM2-JsgCsDVf9A02aUj6SQhT_UIekjWym_RVv5LlxY5RQDO02ZD0zPZP-jC_g-L7Gz13EWhRJY0Ja7BWKeu8lYkU"
 QR_CODE_DIR = os.path.join(root.var("data_dir"), "qr_code")
 PROCESSED_DIR = os.path.join(root.var("data_dir"), "processed")
 SCREENSHOT_DIR = os.path.join(root.var("data_dir"), "screenshots")
 SCREENSHOT_FRAME = 230
+
+# How many frames the extracted still is held at the head of the processed video,
+# so a phone's camera roll thumbnail shows the guest instead of whatever the
+# render opens on. One frame is invisible on playback and enough for any
+# thumbnail generator that decodes frame 0 -- raise it if some platform seeks
+# past the very start and picks a later frame instead.
+#
+# NOTE: this shifts all video content later by this many frames. The kiosk's
+# TakeawayScreen.jsx (CADI-2026-WEBAPPS) loops a hardcoded frame range tuned to
+# the arrival beat -- at 1 frame the drift is irrelevant, but if you raise this
+# meaningfully, shift LOOP_START/LOOP_END there by the same amount.
+INTRO_HOLD_FRAMES = 1
 
 def _upload_video(video_file, timestamp):
 	headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -100,6 +113,104 @@ def _extract_frame(video_path, output_path, frame_number=SCREENSHOT_FRAME):
 	return output_path
 
 
+def _probe_stream(video_path, stream, entries):
+	"""Read ffprobe stream fields as a stripped string, or "" if unavailable."""
+	result = subprocess.run([
+		FFPROBE_PATH,
+		"-v", "error",
+		"-select_streams", stream,
+		"-show_entries", f"stream={entries}",
+		"-of", "default=nw=1:nk=1",
+		video_path,
+	], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+	if result.returncode != 0:
+		return ""
+	return result.stdout.decode(errors="replace").strip()
+
+
+def _prepend_frame(video_path, still_path, hold_frames=INTRO_HOLD_FRAMES):
+	"""Put the already-extracted still at the head of the video, in place.
+
+	The point is the camera roll: a saved takeaway gets its thumbnail from the
+	start of the file, so without this the guest's tile is whatever the render
+	opens on rather than a shot of them.
+
+	Returns True on success. Failure is logged and non-fatal -- same stance as
+	_extract_frame, a cosmetic first frame isn't worth losing a takeaway over.
+	"""
+	# r_frame_rate comes back as a rational ("30/1"), not a float.
+	raw_fps = _probe_stream(video_path, "v:0", "r_frame_rate")
+	try:
+		numerator, _, denominator = raw_fps.partition("/")
+		fps = float(numerator) / float(denominator or 1)
+	except ValueError:
+		fps = 0
+	if fps <= 0:
+		print(f"Could not read frame rate from {video_path} (got {raw_fps!r}), skipping intro frame")
+		return False
+
+	hold_seconds = hold_frames / fps
+	# Pass 1 skips the audio mux entirely when the shareable track is missing, so
+	# don't assume there's an audio stream to delay.
+	has_audio = bool(_probe_stream(video_path, "a:0", "codec_type"))
+
+	# fps= here is load-bearing rather than redundant: a lone still carries no
+	# frame duration, so concat computes a zero-length first segment and stacks
+	# the video on top of the still at the same timestamp instead of after it --
+	# leaving a 1-microsecond frame that no player or thumbnailer would use.
+	# Setting the rate gives that frame a real duration. trim= pins the count
+	# exactly, independent of how -t rounds.
+	video_chain = (
+		f"[0:v]trim=end_frame={hold_frames},setpts=PTS-STARTPTS,fps={fps},setsar=1[still];"
+		f"[1:v]setsar=1[main];"
+		f"[still][main]concat=n=2:v=1:a=0[v]"
+	)
+	# Delaying the audio by exactly the hold keeps the music bed landing on the
+	# motion, and grows both streams equally so the output needs no -shortest.
+	if has_audio:
+		filtergraph = f"{video_chain};[1:a]adelay={int(round(hold_seconds * 1000))}:all=1[a]"
+	else:
+		filtergraph = video_chain
+
+	temp_path = f"{video_path}.intro.mp4"
+	command = [
+		FFMPEG_PATH,
+		"-y",
+		"-loop", "1", "-framerate", str(fps), "-t", f"{hold_seconds:.6f}", "-i", still_path,
+		"-i", video_path,
+		"-filter_complex", filtergraph,
+		"-map", "[v]",
+	]
+	if has_audio:
+		command += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
+	command += [
+		"-c:v", "libx264",
+		"-movflags", "+faststart",
+		"-pix_fmt", "yuv420p",
+		"-preset", "fast",
+		# A notch better than pass 1's crf 20, to limit the generation loss from
+		# encoding this clip a second time.
+		"-crf", "18",
+		temp_path,
+	]
+
+	result = subprocess.run(command,
+		stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+
+	if result.returncode != 0 or not os.path.isfile(temp_path):
+		ffmpeg_log = result.stdout.decode(errors="replace")
+		print(f"Intro frame prepend failed ({result.returncode}):\n{ffmpeg_log[-2000:]}")
+		if os.path.isfile(temp_path):
+			os.remove(temp_path)
+		return False
+
+	# Swap in place, so the uploaded file and the path recorded in Postgres are
+	# both unchanged and a half-written encode can never replace a good video.
+	os.replace(temp_path, video_path)
+	print(f"Prepended {hold_frames} intro frame(s) to", video_path)
+	return True
+
+
 def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	if not file_name or not os.path.isfile(file_name):
 		return {"status": "video_upload_error", "message": f"File not found: {file_name}"}
@@ -145,6 +256,13 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 
 	screenshot_file_name = os.path.join(SCREENSHOT_DIR, f"{base_name}_screenshot.png")
 	screenshot_path = _extract_frame(output_file_name, screenshot_file_name)
+
+	# Order is load-bearing: the still has to be extracted BEFORE the prepend
+	# (afterwards SCREENSHOT_FRAME would point at a different moment, since every
+	# frame shifts later), and the prepend has to happen BEFORE the upload, since
+	# the file that gets shared is the one whose thumbnail we're fixing.
+	if screenshot_path:
+		_prepend_frame(output_file_name, screenshot_path)
 
 	with open(output_file_name, "rb") as video_file:
 		print("Attempting Upload of ", output_file_name)

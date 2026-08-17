@@ -27,10 +27,11 @@ class AnalyticsControlEXT(BaseEXT):
     def OnInit(self):
         # return False if initialization fails
         return True
+    
 
-    def Send_mixpanel_event(self):
+    def Send_mixpanel_event(self, event_type_name):
         properties = {
-            'event_type': 'photo_booth_start',
+            'event_type': event_type_name,
             'session_id': f"photobooth_{int(datetime.now().timestamp())}",
             'timestamp': datetime.now().isoformat(),
             'platform': 'Touchdesigner',
@@ -46,7 +47,7 @@ class AnalyticsControlEXT(BaseEXT):
         
         # Prepare the event data
         event_data = {
-            'event': self.event_name,
+            'event': event_type_name,
             'properties': properties
         }
         
