@@ -30,6 +30,8 @@ class StateManagerEXT(BaseEXT):
         op.camera_control.par.Startcountdown.pulse()
         self.Me.par.State = "COUNTDOWN"
         op.poster_control.par.Recordtakeaway.pulse()
+        self.Me.op("oscout1").sendOSC("/remote", ["op.screensaver.ExitScreensaver()"])
+        
         pass
 
     def _onStopphotobooth(self, par):
