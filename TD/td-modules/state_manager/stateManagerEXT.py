@@ -27,6 +27,7 @@ class StateManagerEXT(BaseEXT):
 
     def _onStartphotobooth(self, par):
         self.Logger.debug("Starting Countdown and Photobooth")
+        self.Me.op("state_timer").par.start.pulse()
         op.camera_control.par.Startcountdown.pulse()
         self.Me.par.State = "COUNTDOWN"
         op.poster_control.par.Recordtakeaway.pulse()

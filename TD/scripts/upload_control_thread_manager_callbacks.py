@@ -56,22 +56,26 @@ SHARE_COPY_ATTEMPTS = 3
 # event still in flight.
 _PROGRESS = None
 
-# stage -> coarse progress, weighted by observed duration. Both ffmpeg passes and the share
-# copy are seconds-scale, so they get real spans rather than instants; anything that lands
-# in under a second is a marker between them. "error" is None so the main thread holds
-# whatever progress it had rather than snapping the bar back to zero.
+# stage -> coarse progress, weighted by observed duration (~3s encode, ~10-12s upload).
+#
+# "ready" at 0.45 is the one that matters: that's the point the guest can already be
+# served their takeaway, and everything past it is the curatorlive upload finishing in
+# the background. So the back half of this bar is work nobody is waiting on -- don't
+# read it as "the guest is still waiting".
+#
+# "error" is None so the main thread holds whatever progress it had rather than snapping
+# the bar back to zero.
 STAGES = {
 	"queued":      0.00,
 	"transcoding": 0.05,
-	"transcoded":  0.40,
-	"screenshot":  0.45,
-	"prepending":  0.50,
-	"prepended":   0.60,
-	"uploading":   0.62,
-	"uploaded":    0.85,
-	"qrcode":      0.88,
-	"publishing":  0.90,
-	"published":   0.97,
+	"transcoded":  0.30,
+	"screenshot":  0.35,
+	"publishing":  0.38,
+	"published":   0.43,
+	"ready":       0.45,
+	"uploading":   0.50,
+	"uploaded":    0.90,
+	"qrcode":      0.93,
 	"completing":  0.98,
 	"done":        1.00,
 	"error":       None,
@@ -122,32 +126,64 @@ def _upload_video(video_file, timestamp):
 	except json.JSONDecodeError:
 		return {"result": "error", "error": "Invalid JSON response", "statusCode": response.status_code, "data": None, "response_body": response.text}
 
-def _complete_playthrough(playthrough_id, video_path, qrcode_path, microsite_url, screenshot_path=None):
-    """Fills in the playthroughs row the Operator app already created (id +
-    created_at only) once processing/upload finishes. An upsert rather than a
-    plain PATCH: fills in the normal (Operator app already created the row)
-    case, but still creates a fresh row if playthrough_id was somehow missing
-    and _process_and_upload fell back to a brand-new uuid. created_at is
-    deliberately omitted so it's untouched on the merge path but still gets
-    its DEFAULT now() if this ends up creating a fresh row.
-    """
-    payload = {
-        "id": playthrough_id,
-        "video_path": video_path.replace("\\", "/"),
-        "qrcode_path": qrcode_path.replace("\\", "/"),
-        "microsite_url": microsite_url,
-        "ingested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    }
-    if screenshot_path:
-        payload["screenshot_path"] = screenshot_path.replace("\\", "/")
+def _upsert_playthrough(playthrough_id, **fields):
+    """Merge fields into the playthroughs row the Operator app already created.
 
+    An upsert rather than a plain PATCH: fills in the normal case (row already
+    exists) but still creates one if playthrough_id was somehow missing and
+    _process_and_upload fell back to a brand-new uuid. created_at is deliberately
+    never sent, so it's untouched on the merge path but still gets its DEFAULT
+    now() if this ends up creating a fresh row.
+
+    Only ever send fields this pipeline owns. participant_id and
+    share_to_big_screen belong to the kiosk's email step and must never appear
+    here -- a guest can submit their email between our two writes, and including
+    those keys would null out the link they just made.
+    """
     response = requests.post(
         f"{POSTGREST_URL}/playthroughs?on_conflict=id",
-        json=payload,
+        json={"id": playthrough_id, **fields},
         headers={"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"},
         timeout=15,
     )
     response.raise_for_status()
+
+
+def _mark_media_ready(playthrough_id, video_path, screenshot_path=None):
+    """EARLY write -- the moment the kiosk may show this takeaway to a guest.
+
+    Deliberately lands before the curatorlive upload, which is ~60% of the total
+    pipeline time and which the guest doesn't need in order to watch their own
+    video. video_path being non-NULL is the kiosk's readiness signal, so this
+    must only run AFTER the file is fully published to the share.
+
+    ingested_at is set here rather than at completion, and that matters more than
+    it looks: the kiosk's approval timeout is measured from
+    COALESCE(ingested_at, created_at). Left NULL until completion, the review
+    window would be measured from capture start instead -- so any capture whose
+    robot cycle plus processing exceeded the window would become servable with no
+    operator review at all. Setting it here also keeps servability monotonic; a
+    later ingested_at would make an already-released row un-servable again.
+    """
+    fields = {
+        "video_path": video_path.replace("\\", "/"),
+        "ingested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    if screenshot_path:
+        fields["screenshot_path"] = screenshot_path.replace("\\", "/")
+    _upsert_playthrough(playthrough_id, **fields)
+
+
+def _complete_playthrough(playthrough_id, qrcode_path, microsite_url):
+    """LATE write -- everything that depends on the upload having finished.
+
+    Must NOT touch ingested_at; see _mark_media_ready for why.
+    """
+    _upsert_playthrough(
+        playthrough_id,
+        qrcode_path=qrcode_path.replace("\\", "/"),
+        microsite_url=microsite_url,
+    )
 
 def _extract_frame(video_path, output_path, frame_number=SCREENSHOT_FRAME):
 	"""Grab a single frame as a PNG for the kiosk's operator gallery.
@@ -194,94 +230,6 @@ def _probe_stream(video_path, stream, entries):
 	if result.returncode != 0:
 		return ""
 	return result.stdout.decode(errors="replace").strip()
-
-
-def _prepend_frame(video_path, still_path, hold_frames=INTRO_HOLD_FRAMES):
-	"""Put the already-extracted still at the head of the video, in place.
-
-	The point is the camera roll: a saved takeaway gets its thumbnail from the
-	start of the file, so without this the guest's tile is whatever the render
-	opens on rather than a shot of them.
-
-	Returns True on success. Failure is logged and non-fatal -- same stance as
-	_extract_frame, a cosmetic first frame isn't worth losing a takeaway over.
-	"""
-	# r_frame_rate comes back as a rational ("30/1"), not a float.
-	raw_fps = _probe_stream(video_path, "v:0", "r_frame_rate")
-	try:
-		numerator, _, denominator = raw_fps.partition("/")
-		fps = float(numerator) / float(denominator or 1)
-	except ValueError:
-		fps = 0
-	if fps <= 0:
-		_report("prepending", f"could not read frame rate (got {raw_fps!r}), skipping intro frame",
-			level="warning")
-		return False
-
-	_report("prepending", video_path)
-
-	hold_seconds = hold_frames / fps
-	# Pass 1 skips the audio mux entirely when the shareable track is missing, so
-	# don't assume there's an audio stream to delay.
-	has_audio = bool(_probe_stream(video_path, "a:0", "codec_type"))
-
-	# fps= here is load-bearing rather than redundant: a lone still carries no
-	# frame duration, so concat computes a zero-length first segment and stacks
-	# the video on top of the still at the same timestamp instead of after it --
-	# leaving a 1-microsecond frame that no player or thumbnailer would use.
-	# Setting the rate gives that frame a real duration. trim= pins the count
-	# exactly, independent of how -t rounds.
-	video_chain = (
-		f"[0:v]trim=end_frame={hold_frames},setpts=PTS-STARTPTS,fps={fps},setsar=1[still];"
-		f"[1:v]setsar=1[main];"
-		f"[still][main]concat=n=2:v=1:a=0[v]"
-	)
-	# Delaying the audio by exactly the hold keeps the music bed landing on the
-	# motion, and grows both streams equally so the output needs no -shortest.
-	if has_audio:
-		filtergraph = f"{video_chain};[1:a]adelay={int(round(hold_seconds * 1000))}:all=1[a]"
-	else:
-		filtergraph = video_chain
-
-	temp_path = f"{video_path}.intro.mp4"
-	command = [
-		FFMPEG_PATH,
-		"-y",
-		"-loop", "1", "-framerate", str(fps), "-t", f"{hold_seconds:.6f}", "-i", still_path,
-		"-i", video_path,
-		"-filter_complex", filtergraph,
-		"-map", "[v]",
-	]
-	if has_audio:
-		command += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
-	command += [
-		"-c:v", "libx264",
-		"-movflags", "+faststart",
-		"-pix_fmt", "yuv420p",
-		"-preset", "fast",
-		# A notch better than pass 1's crf 20, to limit the generation loss from
-		# encoding this clip a second time.
-		"-crf", "18",
-		temp_path,
-	]
-
-	result = subprocess.run(command,
-		stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
-
-	if result.returncode != 0 or not os.path.isfile(temp_path):
-		ffmpeg_log = result.stdout.decode(errors="replace")
-		# Warning, not error: the takeaway is still fine, just without the intro frame.
-		_report("prepending", f"intro frame prepend failed ({result.returncode})",
-			level="warning", detail=ffmpeg_log[-2000:])
-		if os.path.isfile(temp_path):
-			os.remove(temp_path)
-		return False
-
-	# Swap in place, so the uploaded file and the path recorded in Postgres are
-	# both unchanged and a half-written encode can never replace a good video.
-	os.replace(temp_path, video_path)
-	_report("prepended", f"{hold_frames} intro frame(s) -> {video_path}")
-	return True
 
 
 def _publish_to_share(local_path):
@@ -351,21 +299,69 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	output_file_name = os.path.join(PROCESSED_DIR, f"{base_name}_processed.mp4")
 	_report("transcoding", output_file_name)
 
-	# Muxes the shareable audio track in on the same pass rather than a second
-	# ffmpeg call: a second -i for the audio, explicit -map so the output gets
-	# video from input 0 and audio from input 1 (drops whatever audio, if any,
-	# came in on the source clip), plus an audio codec since raw WAV doesn't
-	# belong in an MP4 - AAC does. -shortest caps the output at whichever of
-	# the two is shorter, so a length mismatch doesn't leave a silent tail or a
-	# frozen frame; drop it if you'd rather always keep the full video length.
+	# One pass does everything: transcode, mux the shareable audio track, and put
+	# the intro frame at the head of the video. That last part used to be a second
+	# full re-encode afterwards; folding it in here saves ~2s off the time before
+	# the guest can see their takeaway, and drops a generation of re-encode.
 	has_audio = os.path.isfile(audio_file_name)
 	if not has_audio:
 		_report("transcoding", f"audio file not found at {audio_file_name}, processing without it",
 			level="warning")
 
+	# Frame rate and duration of the SOURCE. Both are needed to place the intro
+	# frame and bound the audio; read rather than assumed, since the render
+	# settings have changed before (an older render was 60fps, current ones 30).
+	raw_fps = _probe_stream(file_name, "v:0", "r_frame_rate")
+	source_duration = _probe_stream(file_name, "v:0", "duration")
+	try:
+		numerator, _, denominator = raw_fps.partition("/")
+		fps = float(numerator) / float(denominator or 1)
+		duration = float(source_duration)
+	except ValueError:
+		fps, duration = 0, 0
+
+	# No usable timing means no intro frame -- fall back to a plain transcode
+	# rather than failing the run over a cosmetic first frame.
+	intro = fps > 0 and duration > 0 and INTRO_HOLD_FRAMES > 0
+	if not intro:
+		_report("transcoding", f"no usable source timing (fps={raw_fps!r}, dur={source_duration!r}), "
+			"transcoding without the intro frame", level="warning")
+
 	ffmpeg_cmd = [FFMPEG_PATH, "-y", "-i", file_name]
 	if has_audio:
-		ffmpeg_cmd += ["-i", audio_file_name, "-map", "0:v:0", "-map", "1:a:0"]
+		ffmpeg_cmd += ["-i", audio_file_name]
+
+	if intro:
+		hold_seconds = INTRO_HOLD_FRAMES / fps
+		# fps= is load-bearing, not redundant: a single trimmed frame carries no
+		# duration, so concat computes a zero-length first segment and stacks the
+		# body on top of it at the same timestamp instead of after it. tpad only
+		# applies for a multi-frame hold; trim alone already yields exactly one.
+		pad = f",tpad=stop={INTRO_HOLD_FRAMES - 1}:stop_mode=clone" if INTRO_HOLD_FRAMES > 1 else ""
+		chains = [
+			f"[0:v]split=2[sel][main]",
+			f"[sel]trim=start_frame={SCREENSHOT_FRAME}:end_frame={SCREENSHOT_FRAME + 1},"
+			f"setpts=PTS-STARTPTS,fps={fps}{pad},setsar=1[still]",
+			f"[main]setsar=1[body]",
+			f"[still][body]concat=n=2:v=1:a=0[v]",
+		]
+		if has_audio:
+			# Delayed so the music bed still lands on the motion, then bounded to
+			# the video's new length. -shortest can't do this job any more: it
+			# measures the raw input, not the filtered output, so it would trim
+			# the final frame back off the video we just lengthened.
+			chains.append(
+				f"[1:a]adelay={int(round(hold_seconds * 1000))}:all=1,"
+				f"atrim=end={duration + hold_seconds:.6f}[a]"
+			)
+		ffmpeg_cmd += ["-filter_complex", ";".join(chains), "-map", "[v]"]
+		if has_audio:
+			ffmpeg_cmd += ["-map", "[a]"]
+	else:
+		ffmpeg_cmd += ["-map", "0:v:0"]
+		if has_audio:
+			ffmpeg_cmd += ["-map", "1:a:0", "-shortest"]
+
 	ffmpeg_cmd += [
 		"-c:v", "libx264",
 		"-movflags", "+faststart",
@@ -374,7 +370,7 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 		"-crf", "20",
 	]
 	if has_audio:
-		ffmpeg_cmd += ["-c:a", "aac", "-b:a", "192k", "-shortest"]
+		ffmpeg_cmd += ["-c:a", "aac", "-b:a", "192k"]
 	ffmpeg_cmd.append(output_file_name)
 
 	ffmpeg_result = subprocess.run(ffmpeg_cmd,
@@ -387,15 +383,39 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	else:
 		_report("transcoded", output_file_name)
 
+	# Read from the SOURCE, not the output: the output now carries the intro frame,
+	# so its frame SCREENSHOT_FRAME is no longer the same moment. Taking both from
+	# the source keeps the gallery thumbnail and the intro frame the same frame,
+	# which is the whole point of picking one representative moment.
 	screenshot_file_name = os.path.join(SCREENSHOT_DIR, f"{base_name}_screenshot.png")
-	screenshot_path = _extract_frame(output_file_name, screenshot_file_name)
+	screenshot_path = _extract_frame(file_name, screenshot_file_name)
 
-	# Order is load-bearing: the still has to be extracted BEFORE the prepend
-	# (afterwards SCREENSHOT_FRAME would point at a different moment, since every
-	# frame shifts later), and the prepend has to happen BEFORE the upload, since
-	# the file that gets shared is the one whose thumbnail we're fixing.
-	if screenshot_path:
-		_prepend_frame(output_file_name, screenshot_path)
+	# --- everything the guest needs is ready; hand it over before uploading ----
+	# The curatorlive upload below is ~60% of this pipeline and the guest doesn't
+	# need it to watch their own video, so the kiosk is told about the takeaway
+	# now and the upload finishes while they walk screens 1-3.
+	#
+	# Publish BEFORE the DB write, never after: video_path appearing is the
+	# kiosk's signal that the file is readable, and _publish_to_share only renames
+	# into place once the copy is complete.
+	if not _publish_to_share(output_file_name):
+		_report("error", "failed copying the video to the kiosk share", level="error")
+		return {"status": "video_upload_error", "message": "Failed copying the video to the kiosk share"}
+
+	# Best-effort: without it the gallery just falls back to the video's first
+	# frame, so drop the path rather than fail the run.
+	if screenshot_path and not _publish_to_share(screenshot_path):
+		_report("publishing", "continuing without a screenshot -- the gallery will use the video's first frame",
+			level="warning")
+		screenshot_path = None
+
+	# Reuse the id the Operator app minted at capture time (threaded through via
+	# Setup()'s payload) so both writes land on the SAME row the operator already
+	# created, rather than an orphaned second one. Only falls back to a fresh uuid
+	# if that id is missing.
+	id = playthrough_id or uuid.uuid4()
+	_mark_media_ready(str(id), output_file_name, screenshot_path)
+	_report("ready", f"{id} -- guest can now be served")
 
 	with open(output_file_name, "rb") as video_file:
 		_report("uploading", output_file_name, attempt=1)
@@ -417,33 +437,16 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	qrcode = segno.make_qr(takeaway_url)
 	qrcode.save(qrcode_file_name, scale=20, border=2)
 	_report("qrcode", qrcode_file_name)
-	# Get the media onto the kiosk machine BEFORE completing the row below. The
-	# kiosk treats a row with video_path set as ready to hand to a guest, so
-	# writing that first would advertise media it can't actually read yet.
-	# Video and QR are both load-bearing for the guest flow (screens 1 and 4),
-	# so failing to publish either is a failed run -- leaving the row incomplete
-	# keeps the takeaway out of the queue rather than serving a broken one.
-	video_published = _publish_to_share(output_file_name)
-	qrcode_published = _publish_to_share(qrcode_file_name)
-	if not (video_published and qrcode_published):
-		_report("error", "failed copying media to the kiosk share", level="error",
-			video_published=video_published, qrcode_published=qrcode_published)
-		return {"status": "video_upload_error", "message": "Failed copying media to the kiosk share"}
 
-	# Best-effort by comparison: without it the operator gallery just falls back
-	# to the video's first frame, so drop the path rather than fail the run.
-	if screenshot_path and not _publish_to_share(screenshot_path):
-		_report("publishing", "continuing without a screenshot -- the gallery will use the video's first frame",
-			level="warning")
-		screenshot_path = None
+	# The guest may already be watching their video and walking toward screen 4,
+	# so this is the one the QR screen is waiting on. Same ordering rule as the
+	# video: on the share before it's in the DB.
+	if not _publish_to_share(qrcode_file_name):
+		_report("error", "failed copying the QR code to the kiosk share", level="error")
+		return {"status": "video_upload_error", "message": "Failed copying the QR code to the kiosk share"}
 
-	# Reuse the id the Operator app minted at capture time (threaded through via
-	# Setup()'s payload) so the Postgres `playthroughs` row this completes is the
-	# SAME row the operator already created, rather than an orphaned second row.
-	# Only falls back to a fresh uuid if that id is missing.
-	id = playthrough_id or uuid.uuid4()
 	_report("completing", str(id))
-	_complete_playthrough(str(id), output_file_name, qrcode_file_name, takeaway_url, screenshot_path)
+	_complete_playthrough(str(id), qrcode_file_name, takeaway_url)
 	_report("done", takeaway_url)
 	return {"status": "video_upload_success", "qr_code_path": qrcode_file_name}
 
