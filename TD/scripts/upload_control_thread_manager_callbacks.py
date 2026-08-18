@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -19,9 +20,10 @@ FFMPEG_PATH = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"
 FFPROBE_PATH = FFMPEG_PATH.replace("ffmpeg.exe", "ffprobe.exe")
 # AUTH_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiOTRlMjg5NWNhOGFmZWVjN2YyMjBkMWQ1ODI2OWU2YzY0YzVmNWEzN2RmOGZmZmZjN2MyYzk2ZjBkNDFlOTgwMTc4NjRjZDg0M2YwYzEwOWYiLCJpYXQiOjE3NTM0NzgxNDcuNjUxNDU5LCJuYmYiOjE3NTM0NzgxNDcuNjUxNDYsImV4cCI6MTc4NTAxNDE0Ny42MzI0OTksInN1YiI6IjE0MjQ1Iiwic2NvcGVzIjpbImFwaSIsInJlYWQtZXZlbnRzIiwidXBsb2FkIl19.OQ5-Fz_1q-npufiyaV76PboSt6R-o8YXDSG3Hj-1iw1Zfo16iBYBsaO8THDhMikQ4QXD5s3zTXMvl-lkAY_IJiSqfrPEYqItBKhskDD1d4fuWE6zotPDS51CizvnTuzapdoUow1ilEzbtPewoGjbAeBx8UpeIV_vjj25Hzns6V1yd68wCDoPLDX6t8BxH_l-Di9VBfVRiv3Fo8lx2ylAMs_EfyOGHDLToMqXvYgNoaNptUOh0JwtPdJyBrGanU2qic--kOsHA8eZszI2eIDspi61Rl8_PNuNCcSGbQvJ18GLNh1sm5T4STORKOtnNrgRun4Zt1yStsCrMvZBw7f7hOqsX4CvIc328BjzsHd1pZl7_dkpT1t-75xp9c_n-z9tVZN1ThNG2Vg0QEtAP9s-AUMBtYt2K-krYFLe1qU06y-ITH8aX1DR8bivMnDX70T9PSADggePKfN5OkK45FZSYnUYWtfkMuHdO04CRc7BepEvj2KsYPzJHDH7QX2OERO1mgIr1jkrn4YZx6hf6usqvWUK5nqToNxO6PiZNURS1gVCI7-WyeRBrdItZLs7UP_8LgpTEuLqDEe8YFFu4pzZPk-9fgyJ4kFpnfs3PKIJQD83HVlKP3wSDmfek1TZHH_c38k_69YBchMzElZ67Ty2A_W_Nnahc5_IQp4Nt2DL7FE"
 AUTH_TOKEN= "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiYWU2MmIwNzA2OWZmNmJiYzFmYjZjMmZmZmQ2ZTNkZTdlMzc2OWQzZjc1M2I0ODBlMjkwYjJiM2IxNzBhNGFlNzE3ZDliNTRjOTY2NjRiNWMiLCJpYXQiOjE3ODUxODc2NjguMzEwMjc1LCJuYmYiOjE3ODUxODc2NjguMzEwMjgyLCJleHAiOjE4MTY3MjM2NjguMTE2MDkxLCJzdWIiOiIxNDI0NSIsInNjb3BlcyI6WyJhcGkiLCJyZWFkLWV2ZW50cyIsInVwbG9hZCJdfQ.wfF5qeMLJTeisHncu_slpadwnR5IF8NYR5tazMiu0wqL5i-V-AsNbeZRR5mXiOng4IteW5z66bQOuuTogZtWi4i5rEglrPKgcX01kVizIjIaoukZl4VlxB-uEo0gnK4V5hd15wK7rJa2v_3iOkkD0T7-HdW5S083DVILt8uqjMllhZqO81_apT1OI7-xtJtjh9Gg_2QP4Q7fRRccrIY5HuKzzp-fJgRJOoJavv4XEp4NjgqzUnnT2jFummQm0gKB0POfK6bjnV1XnMzBFJ7rdiRCAqE47EQ08FnPyuMykt1pGpJboHHee8Igf1T_3Qw_OjkHwYI9gq1JH622YZuDlNoL-Wk3L2cZFabDguV0VSri0FjWrbTrLpgjbgzxzCKkbXZH2YWYKI-bOSzOJVavXBmNqkSm0Zz0TD6U89P5qDJYuVe_uDh-UPrWFbja4cW6U2nBieehN9RydUup6R5pN41F2opHtb6OED8bKDxDwy6hmqF2VlzImgO_F0vC8K0tU3OQXTqidFJWt-YXi6ZDPYaMANt6Syw31RdikwSXttP2MR-kjUpbksNUMUtXri2gTH--RPLArPOSypAIYdvEM2-JsgCsDVf9A02aUj6SQhT_UIekjWym_RVv5LlxY5RQDO02ZD0zPZP-jC_g-L7Gz13EWhRJY0Ja7BWKeu8lYkU"
-QR_CODE_DIR = os.path.join(root.var("data_dir"), "qr_code")
-PROCESSED_DIR = os.path.join(root.var("data_dir"), "processed")
-SCREENSHOT_DIR = os.path.join(root.var("data_dir"), "screenshots")
+DATA_DIR = root.var("data_dir")
+QR_CODE_DIR = os.path.join(DATA_DIR, "qr_code")
+PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
+SCREENSHOT_DIR = os.path.join(DATA_DIR, "screenshots")
 SCREENSHOT_FRAME = 230
 
 # How many frames the extracted still is held at the head of the processed video,
@@ -35,6 +37,18 @@ SCREENSHOT_FRAME = 230
 # the arrival beat -- at 1 frame the drift is irrelevant, but if you raise this
 # meaningfully, shift LOOP_START/LOOP_END there by the same amount.
 INTRO_HOLD_FRAMES = 1
+
+# The kiosk streams media straight off the absolute paths recorded in Postgres,
+# so every file it serves has to exist on that machine too. This copies them
+# there directly instead of waiting for Syncthing to notice a 20MB+ video.
+#
+# The whole takeaway folder is exposed as a single share that resolves to the
+# same C:\Cadi26\takeaway path on the kiosk PC, so a local file maps to it by
+# swapping DATA_DIR for SHARE_ROOT and keeping the rest of the path intact --
+# which is exactly what keeps the absolute path written to the DB valid on both
+# machines. New media subdirectories need no share of their own.
+SHARE_ROOT = r"\\DESKTOP-N42F08I\takeaway"
+SHARE_COPY_ATTEMPTS = 3
 
 def _upload_video(video_file, timestamp):
 	headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -211,6 +225,57 @@ def _prepend_frame(video_path, still_path, hold_frames=INTRO_HOLD_FRAMES):
 	return True
 
 
+def _publish_to_share(local_path):
+	"""Copy a finished artifact to the matching share on the kiosk machine.
+
+	Copies to a temp name and renames, so the kiosk can never read a half-copied
+	file -- the rename is atomic within the share, unlike the copy itself, which
+	for a 20MB video is very much not instantaneous.
+
+	Returns True on success. Retries a couple of times first, since the common
+	failure here is a momentary network blip rather than anything permanent.
+	"""
+	if not local_path or not os.path.isfile(local_path):
+		print(f"Nothing to publish, missing: {local_path}")
+		return False
+
+	# Mirror the path under the share: DATA_DIR/processed/x.mp4 becomes
+	# SHARE_ROOT/processed/x.mp4, so it lands at the identical absolute path the
+	# kiosk will look it up by.
+	relative = os.path.relpath(local_path, DATA_DIR)
+	# relpath will happily climb out with "..", which would write somewhere
+	# unrelated -- anything not under DATA_DIR is a caller bug, not a copy to make.
+	if relative.startswith(".."):
+		print(f"Refusing to publish {local_path}: not inside {DATA_DIR}")
+		return False
+
+	destination = os.path.join(SHARE_ROOT, relative)
+	# Not the final name, so an in-flight copy never shows up in the kiosk's
+	# directory listings or gets picked up by anything scanning the share.
+	temp_destination = f"{destination}.part"
+
+	for attempt in range(1, SHARE_COPY_ATTEMPTS + 1):
+		try:
+			# Cheap insurance for a media subdirectory that exists locally but
+			# hasn't been created on the share side yet.
+			os.makedirs(os.path.dirname(destination), exist_ok=True)
+			shutil.copyfile(local_path, temp_destination)
+			os.replace(temp_destination, destination)
+			print("Published", destination)
+			return True
+		except OSError as e:
+			print(f"Publish attempt {attempt}/{SHARE_COPY_ATTEMPTS} failed for {destination}: {e}")
+			try:
+				if os.path.isfile(temp_destination):
+					os.remove(temp_destination)
+			except OSError:
+				pass
+			if attempt < SHARE_COPY_ATTEMPTS:
+				time.sleep(1)
+
+	return False
+
+
 def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	if not file_name or not os.path.isfile(file_name):
 		return {"status": "video_upload_error", "message": f"File not found: {file_name}"}
@@ -281,6 +346,23 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	takeaway_url = f"{MICROSITE_URL}/{EVENT_CODE}/{takeaway_id}"
 	qrcode = segno.make_qr(takeaway_url)
 	qrcode.save(qrcode_file_name, scale=20, border=2)
+	# Get the media onto the kiosk machine BEFORE completing the row below. The
+	# kiosk treats a row with video_path set as ready to hand to a guest, so
+	# writing that first would advertise media it can't actually read yet.
+	# Video and QR are both load-bearing for the guest flow (screens 1 and 4),
+	# so failing to publish either is a failed run -- leaving the row incomplete
+	# keeps the takeaway out of the queue rather than serving a broken one.
+	video_published = _publish_to_share(output_file_name)
+	qrcode_published = _publish_to_share(qrcode_file_name)
+	if not (video_published and qrcode_published):
+		return {"status": "video_upload_error", "message": "Failed copying media to the kiosk share"}
+
+	# Best-effort by comparison: without it the operator gallery just falls back
+	# to the video's first frame, so drop the path rather than fail the run.
+	if screenshot_path and not _publish_to_share(screenshot_path):
+		print("Continuing without a screenshot -- the gallery will use the video's first frame")
+		screenshot_path = None
+
 	# Reuse the id the Operator app minted at capture time (threaded through via
 	# Setup()'s payload) so the Postgres `playthroughs` row this completes is the
 	# SAME row the operator already created, rather than an orphaned second row.
