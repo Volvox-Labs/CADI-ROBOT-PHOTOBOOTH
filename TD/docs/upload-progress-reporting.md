@@ -1,7 +1,38 @@
 # Plan: real status reporting from the upload worker thread
 
-> Status: **not started** — written 2026-08-10, deferred until after the install review.
+> Status: **implemented 2026-08-18** (sections 1–3). Written 2026-08-10; the code below is
+> the original plan and some of it is now out of date — read this note before trusting it.
 > Touches `upload_control`, the Thread Manager callbacks, and the QR success path.
+>
+> Deviations from the plan as written, all deliberate:
+>
+> - **Line numbers in §1's table are stale.** The callbacks file grew from ~11 print sites
+>   to 17 between writing and implementing. The conversion was done by matching print text.
+> - **Two stages were added** that postdate the plan: `prepending`/`prepended`
+>   (`_prepend_frame`, a second ffmpeg pass) and `publishing`/`published`
+>   (`_publish_to_share`, three SMB copies to the kiosk PC). `STAGES` was reweighted around
+>   them; the shipped table is the one in the code, not the one below.
+> - **§3 was reduced.** The in-booth guest scenes are dead — the web kiosk owns the guest
+>   flow — so `qrcode_scene`, `Showqrcode`, the `timeout_timer` pulse and
+>   `photo_capture.Showerrormessage` were **not** wired. What was restored is the status
+>   vocabulary: success sets `Status = "complete"`, the error branch now calls
+>   `HandleFailedUpload`, and that method is no longer a stub. `HandleRetryExperience()` is
+>   deliberately not called for the same reason.
+> - **The `status_log` Table DAT was dropped**, along with `_ensureStatusLog` /
+>   `_appendStatusLog` / `_clearStatusLog`. It was conceived as the replacement for the
+>   textport prints, but `_applyProgress` already routes every event through
+>   `self.Logger` and therefore through vvox_tdtools' rotating file handler, with a frame
+>   number attached — so the DAT was a redundant second copy of the same history, costing
+>   a node in the `.tox` and TD-object churn per event. Current state is covered
+>   at-a-glance by the `Stage` / `Progress` / `StatusMessage` / `LastError` pars; history
+>   lives in the log file. Ignore §2's `_ensureStatusLog` paragraph and verification
+>   step 6.
+> - **§4 (the `claude.md` Threading section) was skipped** and is still worth doing.
+> - `operator_interface_bridge.py` and `comfyui_control`, both cited as sources to copy
+>   from, were deleted in `b31b338`. Recover via
+>   `git show b31b338^:TD/td-modules/...` if needed. The `comfyuiControlEXT.py:247`
+>   citation was also wrong: it was `deleteRow(row_index)`, a targeted removal, not the
+>   FIFO trim described here.
 
 ## Context
 

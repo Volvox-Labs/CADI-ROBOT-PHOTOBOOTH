@@ -50,6 +50,58 @@ INTRO_HOLD_FRAMES = 1
 SHARE_ROOT = r"\\DESKTOP-N42F08I\takeaway"
 SHARE_COPY_ATTEMPTS = 3
 
+# Set on the main thread by Setup(), read by the worker. The queue.Queue itself lives on
+# UploadControlEXT rather than here, so this only caches a pointer -- a module-level queue
+# would be swapped out whenever this DAT re-cooks mid-upload, silently orphaning every
+# event still in flight.
+_PROGRESS = None
+
+# stage -> coarse progress, weighted by observed duration. Both ffmpeg passes and the share
+# copy are seconds-scale, so they get real spans rather than instants; anything that lands
+# in under a second is a marker between them. "error" is None so the main thread holds
+# whatever progress it had rather than snapping the bar back to zero.
+STAGES = {
+	"queued":      0.00,
+	"transcoding": 0.05,
+	"transcoded":  0.40,
+	"screenshot":  0.45,
+	"prepending":  0.50,
+	"prepended":   0.60,
+	"uploading":   0.62,
+	"uploaded":    0.85,
+	"qrcode":      0.88,
+	"publishing":  0.90,
+	"published":   0.97,
+	"completing":  0.98,
+	"done":        1.00,
+	"error":       None,
+}
+
+
+def _report(stage, message="", level="info", **extra):
+	"""Thread-safe status hand-off to the main thread.
+
+	Touches ONLY a stdlib Queue -- never a TD object, and in particular never self.Logger,
+	whose formatter reads absTime.frame (vvox_tdtools/log.py) and is therefore a TD API
+	call in disguise. Everything in this module runs off the main thread except Setup().
+
+	Silently no-ops if the queue was never handed over, so the pipeline still runs if the
+	extension didn't initialise -- progress reporting must never be the thing that breaks
+	a takeaway.
+	"""
+	if _PROGRESS is None:
+		return
+	_PROGRESS.put({
+		"stage": stage,
+		"progress": STAGES.get(stage),
+		"message": str(message),
+		"level": level,
+		# Stamped at emit rather than at drain, so a frame hitch doesn't reorder events.
+		"t": time.time(),
+		**extra,
+	})
+
+
 def _upload_video(video_file, timestamp):
 	headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
 	url = f"{BASE_URL}/{EVENT_CODE}"
@@ -120,10 +172,12 @@ def _extract_frame(video_path, output_path, frame_number=SCREENSHOT_FRAME):
 	# real success check here.
 	if result.returncode != 0 or not os.path.isfile(output_path):
 		ffmpeg_log = result.stdout.decode(errors="replace")
-		print(f"Frame {frame_number} extraction failed ({result.returncode}):\n{ffmpeg_log[-2000:]}")
+		# Warning, not error: the run continues without a screenshot.
+		_report("screenshot", f"frame {frame_number} extraction failed ({result.returncode})",
+			level="warning", detail=ffmpeg_log[-2000:])
 		return None
 
-	print("Wrote screenshot", output_path)
+	_report("screenshot", output_path)
 	return output_path
 
 
@@ -160,8 +214,11 @@ def _prepend_frame(video_path, still_path, hold_frames=INTRO_HOLD_FRAMES):
 	except ValueError:
 		fps = 0
 	if fps <= 0:
-		print(f"Could not read frame rate from {video_path} (got {raw_fps!r}), skipping intro frame")
+		_report("prepending", f"could not read frame rate (got {raw_fps!r}), skipping intro frame",
+			level="warning")
 		return False
+
+	_report("prepending", video_path)
 
 	hold_seconds = hold_frames / fps
 	# Pass 1 skips the audio mux entirely when the shareable track is missing, so
@@ -213,7 +270,9 @@ def _prepend_frame(video_path, still_path, hold_frames=INTRO_HOLD_FRAMES):
 
 	if result.returncode != 0 or not os.path.isfile(temp_path):
 		ffmpeg_log = result.stdout.decode(errors="replace")
-		print(f"Intro frame prepend failed ({result.returncode}):\n{ffmpeg_log[-2000:]}")
+		# Warning, not error: the takeaway is still fine, just without the intro frame.
+		_report("prepending", f"intro frame prepend failed ({result.returncode})",
+			level="warning", detail=ffmpeg_log[-2000:])
 		if os.path.isfile(temp_path):
 			os.remove(temp_path)
 		return False
@@ -221,7 +280,7 @@ def _prepend_frame(video_path, still_path, hold_frames=INTRO_HOLD_FRAMES):
 	# Swap in place, so the uploaded file and the path recorded in Postgres are
 	# both unchanged and a half-written encode can never replace a good video.
 	os.replace(temp_path, video_path)
-	print(f"Prepended {hold_frames} intro frame(s) to", video_path)
+	_report("prepended", f"{hold_frames} intro frame(s) -> {video_path}")
 	return True
 
 
@@ -236,7 +295,7 @@ def _publish_to_share(local_path):
 	failure here is a momentary network blip rather than anything permanent.
 	"""
 	if not local_path or not os.path.isfile(local_path):
-		print(f"Nothing to publish, missing: {local_path}")
+		_report("publishing", f"nothing to publish, missing: {local_path}", level="warning")
 		return False
 
 	# Mirror the path under the share: DATA_DIR/processed/x.mp4 becomes
@@ -246,13 +305,19 @@ def _publish_to_share(local_path):
 	# relpath will happily climb out with "..", which would write somewhere
 	# unrelated -- anything not under DATA_DIR is a caller bug, not a copy to make.
 	if relative.startswith(".."):
-		print(f"Refusing to publish {local_path}: not inside {DATA_DIR}")
+		_report("publishing", f"refusing to publish {local_path}: not inside {DATA_DIR}",
+			level="error")
 		return False
 
 	destination = os.path.join(SHARE_ROOT, relative)
 	# Not the final name, so an in-flight copy never shows up in the kiosk's
 	# directory listings or gets picked up by anything scanning the share.
 	temp_destination = f"{destination}.part"
+
+	# Reported per file rather than once for the batch: this is the slowest remaining step
+	# (a 12-23MB video over SMB) and the one most likely to fail, so it's worth being able
+	# to see which of the three is in flight.
+	_report("publishing", destination)
 
 	for attempt in range(1, SHARE_COPY_ATTEMPTS + 1):
 		try:
@@ -261,10 +326,11 @@ def _publish_to_share(local_path):
 			os.makedirs(os.path.dirname(destination), exist_ok=True)
 			shutil.copyfile(local_path, temp_destination)
 			os.replace(temp_destination, destination)
-			print("Published", destination)
+			_report("published", destination)
 			return True
 		except OSError as e:
-			print(f"Publish attempt {attempt}/{SHARE_COPY_ATTEMPTS} failed for {destination}: {e}")
+			_report("publishing", f"attempt {attempt}/{SHARE_COPY_ATTEMPTS} failed for {destination}: {e}",
+				level="warning", attempt=attempt)
 			try:
 				if os.path.isfile(temp_destination):
 					os.remove(temp_destination)
@@ -283,7 +349,7 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	base_name = file_name.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
 	qrcode_file_name = os.path.join(QR_CODE_DIR, f"{base_name}_qrcode.png")
 	output_file_name = os.path.join(PROCESSED_DIR, f"{base_name}_processed.mp4")
-	print("Processing file to",output_file_name)
+	_report("transcoding", output_file_name)
 
 	# Muxes the shareable audio track in on the same pass rather than a second
 	# ffmpeg call: a second -i for the audio, explicit -map so the output gets
@@ -294,7 +360,8 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	# frozen frame; drop it if you'd rather always keep the full video length.
 	has_audio = os.path.isfile(audio_file_name)
 	if not has_audio:
-		print(f"WARNING: audio file not found at {audio_file_name}, processing without it")
+		_report("transcoding", f"audio file not found at {audio_file_name}, processing without it",
+			level="warning")
 
 	ffmpeg_cmd = [FFMPEG_PATH, "-y", "-i", file_name]
 	if has_audio:
@@ -314,10 +381,11 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 		stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW, check=True)
 	if ffmpeg_result.returncode != 0:
 		ffmpeg_log = ffmpeg_result.stdout.decode(errors="replace")
-		print(f"ffmpeg failed ({ffmpeg_result.returncode}):\n{ffmpeg_log[-4000:]}")
+		_report("error", f"ffmpeg failed ({ffmpeg_result.returncode})",
+			level="error", detail=ffmpeg_log[-4000:])
 		return {"status": "video_upload_error", "message": f"ffmpeg failed with code {ffmpeg_result.returncode}"}
 	else:
-		print("FFMPEG Process Successful")
+		_report("transcoded", output_file_name)
 
 	screenshot_file_name = os.path.join(SCREENSHOT_DIR, f"{base_name}_screenshot.png")
 	screenshot_path = _extract_frame(output_file_name, screenshot_file_name)
@@ -330,22 +398,25 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 		_prepend_frame(output_file_name, screenshot_path)
 
 	with open(output_file_name, "rb") as video_file:
-		print("Attempting Upload of ", output_file_name)
+		_report("uploading", output_file_name, attempt=1)
 		video_response = _upload_video(video_file, int(time.time()))
 		retries = 2
 		while video_response["result"] == "error" and retries > 0:
 			video_file.seek(0)
+			_report("uploading", f"retrying after: {video_response.get('error')}",
+				level="warning", attempt=3 - retries + 1)
 			video_response = _upload_video(video_file, int(time.time()))
 			retries -= 1
 
 	if video_response["result"] == "error":
+		_report("error", f"upload failed: {video_response['error']}", level="error")
 		return {"status": "video_upload_error", "message": f"Upload failed: {video_response['error']}"}
-	else:
-		print("Successfully uploaded", video_response)
 	takeaway_id = video_response["data"]["id"]
+	_report("uploaded", takeaway_id)
 	takeaway_url = f"{MICROSITE_URL}/{EVENT_CODE}/{takeaway_id}"
 	qrcode = segno.make_qr(takeaway_url)
 	qrcode.save(qrcode_file_name, scale=20, border=2)
+	_report("qrcode", qrcode_file_name)
 	# Get the media onto the kiosk machine BEFORE completing the row below. The
 	# kiosk treats a row with video_path set as ready to hand to a guest, so
 	# writing that first would advertise media it can't actually read yet.
@@ -355,12 +426,15 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	video_published = _publish_to_share(output_file_name)
 	qrcode_published = _publish_to_share(qrcode_file_name)
 	if not (video_published and qrcode_published):
+		_report("error", "failed copying media to the kiosk share", level="error",
+			video_published=video_published, qrcode_published=qrcode_published)
 		return {"status": "video_upload_error", "message": "Failed copying media to the kiosk share"}
 
 	# Best-effort by comparison: without it the operator gallery just falls back
 	# to the video's first frame, so drop the path rather than fail the run.
 	if screenshot_path and not _publish_to_share(screenshot_path):
-		print("Continuing without a screenshot -- the gallery will use the video's first frame")
+		_report("publishing", "continuing without a screenshot -- the gallery will use the video's first frame",
+			level="warning")
 		screenshot_path = None
 
 	# Reuse the id the Operator app minted at capture time (threaded through via
@@ -368,8 +442,9 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	# SAME row the operator already created, rather than an orphaned second row.
 	# Only falls back to a fresh uuid if that id is missing.
 	id = playthrough_id or uuid.uuid4()
-	print("Completing playthrough", id)
+	_report("completing", str(id))
 	_complete_playthrough(str(id), output_file_name, qrcode_file_name, takeaway_url, screenshot_path)
+	_report("done", takeaway_url)
 	return {"status": "video_upload_success", "qr_code_path": qrcode_file_name}
 
 
@@ -384,6 +459,13 @@ def Setup(tmClientExt: object) -> object:
 	movie = op.upload_control.par.Filepath.eval()
 	playthrough_id = op.operator_bridge.par.Currentplaythroughid.eval()
 	audio_file = op.upload_control.par.Audiofilepath.eval()
+
+	# Main thread, so touching op.upload_control here is fine -- and it's the only place
+	# the worker can be handed the queue, since RunInThread must not resolve operators.
+	global _PROGRESS
+	_PROGRESS = op.upload_control.GetProgressQueue()
+	_report("queued", movie)
+
 	return {"file_name": movie, "audio_file_name": audio_file, "playthrough_id": playthrough_id or None}
 
 
