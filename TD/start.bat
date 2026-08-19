@@ -18,7 +18,7 @@ FOR /F "usebackq tokens=1* delims==" %%i IN (.env.sample) DO (
 )
 
 :: TouchDesigner build numbers
-set TOUCHVERSION=2025.32280
+set TOUCHVERSION=2025.33070
 
 :: set our project file target
 set TOEFILE="cadi-robot-photobooth26.toe"

@@ -67,10 +67,13 @@ class OperatorBridgeEXT(BaseEXT):
             # par because only one playthrough is ever in flight at a time.
             self.Me.par.Currentplaythroughid = message.get("playthroughId") or ""
             op.state_manager.par.Startphotobooth.pulse()
+            op.analytics_control.Send_mixpanel_event("Photo Booth Start")
         elif message.get("type") == "estop":
             op.state_manager.par.Stopphotobooth.pulse()
         elif message.get("type") == "home_robot":
             op.state_manager.HomeRobot()
+        elif message.get("type") == "complete_capture":
+            op.analytics_control.Send_mixpanel_event("Capture Complete")
 
         pass
 
@@ -93,6 +96,17 @@ class OperatorBridgeEXT(BaseEXT):
     def UpdateState(self,state_val):
         self.Me.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"status", "message": state_val}))
 
+
+    def HandleUploaderHealthCheck(self):
+        self.Me.par.Gotuploaderheartbeat = False
+        self.Me.op("heartbeat_wait").par.start.pulse()
+        op.upload_control.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"heartbeat", "message": "connected"}))
+        pass
+    
+    def HandleUploaderHealthcheckTimeout(self):
+        if not self.Me.par.Gotuploaderheartbeat:
+            self.Me.par.Uploaderconnected = False
+        pass
     # Below is an example of a parameter callback. Simply create a method that starts with "_on" and then the name of the parameter.
 
     # Below is an example of a parameter callback. Simply create a method that starts with "_on" and then the name of the parameter.

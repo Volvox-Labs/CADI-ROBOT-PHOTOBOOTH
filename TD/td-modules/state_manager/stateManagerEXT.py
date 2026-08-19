@@ -27,15 +27,19 @@ class StateManagerEXT(BaseEXT):
 
     def _onStartphotobooth(self, par):
         self.Logger.debug("Starting Countdown and Photobooth")
+        self.Me.op("state_timer").par.start.pulse()
         op.camera_control.par.Startcountdown.pulse()
         self.Me.par.State = "COUNTDOWN"
         op.poster_control.par.Recordtakeaway.pulse()
+        self.Me.op("oscout1").sendOSC("/remote", ["op.screensaver.ExitScreensaver()"])
+        
         pass
 
     def _onStopphotobooth(self, par):
         self.Logger.debug("E STOP HIT")
         self.Me.par.State = "E-STOP"
         self.Me.op("oscout1").sendOSC("/remote", ["op.animation_player.par.Stop.pulse()"])
+        self.Me.op("oscout1").sendOSC("/remote", ['setattr(op.animation_player.par,"Enablerobotmotion",0)'])
         pass
 
     def StartRobot(self):
@@ -81,7 +85,10 @@ class StateManagerEXT(BaseEXT):
 
 
     def HomeRobot(self):
+        self.Me.op("oscout1").sendOSC("/remote", ['setattr(op.animation_player.par,"Enablerobotmotion",1)'])
         self.Me.op("oscout1").sendOSC("/remote", ["op.animation_player.par.Gotofirstframe.pulse()"])
+        pass
+
     # def OnFrameStart(self, frame: int):
     #     if frame % 60 == 0:
     #         self.OnEventLoop1()

@@ -6,7 +6,7 @@ except ModuleNotFoundError:
 
 def onStart():
 
-    op('main').par.winopen.pulse()
+    #op('main').par.winopen.pulse()
 
     return
 

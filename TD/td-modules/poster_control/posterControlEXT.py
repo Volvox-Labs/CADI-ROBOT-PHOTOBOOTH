@@ -93,6 +93,7 @@ class PosterControlEXT(BaseEXT):
             ParTemplate("TakeawayOutputPath", par_type="Str",
                         label="TakeawayOutputPath"),
             ParTemplate("FootageStartFrame",par_type="Int",label="FootageStartFrame"),
+            ParTemplate("FootageEndFrame",par_type="Int",label="FootageEndFrame"),
             ParTemplate("TriggerFullTakeawayCycle",par_type="Pulse",label="TriggerFullTakeawayCycle"),
             takeaway_recording_toggle,
         ]
