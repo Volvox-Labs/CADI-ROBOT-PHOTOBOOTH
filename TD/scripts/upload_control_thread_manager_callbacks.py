@@ -146,10 +146,18 @@ def _upsert_playthrough(playthrough_id, **fields):
         headers={"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"},
         timeout=15,
     )
+    # raise_for_status() alone gives you "400 Client Error: Bad Request for url:
+    # ..." and throws the body away -- but the body is where PostgREST actually
+    # says what it objected to (a column missing from its schema cache, a type
+    # mismatch, an FK violation). Report it before re-raising, so a failure here
+    # is diagnosable from the log instead of needing a reproduction.
+    if not response.ok:
+        _report("error", f"playthrough upsert failed ({response.status_code})", level="error",
+            detail=response.text[:1000], sent=sorted(fields))
     response.raise_for_status()
 
 
-def _mark_media_ready(playthrough_id, video_path, screenshot_path=None):
+def _mark_media_ready(playthrough_id, video_path, screenshot_path=None, is_showroom_staff=False):
     """EARLY write -- the moment the kiosk may show this takeaway to a guest.
 
     Deliberately lands before the curatorlive upload, which is ~60% of the total
@@ -168,6 +176,11 @@ def _mark_media_ready(playthrough_id, video_path, screenshot_path=None):
     fields = {
         "video_path": video_path.replace("\\", "/"),
         "ingested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        # Written here rather than at completion so it's set the moment the row
+        # becomes servable -- the kiosk reads it to decide whether to send this
+        # guest's email step to Mixpanel, which happens well before the late
+        # write lands. TD is the only writer of this column.
+        "is_showroom_staff": bool(is_showroom_staff),
     }
     if screenshot_path:
         fields["screenshot_path"] = screenshot_path.replace("\\", "/")
@@ -290,7 +303,7 @@ def _publish_to_share(local_path):
 	return False
 
 
-def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
+def _process_and_upload(file_name, audio_file_name, playthrough_id=None, is_showroom_staff=False):
 	if not file_name or not os.path.isfile(file_name):
 		return {"status": "video_upload_error", "message": f"File not found: {file_name}"}
 
@@ -414,7 +427,7 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	# created, rather than an orphaned second one. Only falls back to a fresh uuid
 	# if that id is missing.
 	id = playthrough_id or uuid.uuid4()
-	_mark_media_ready(str(id), output_file_name, screenshot_path)
+	_mark_media_ready(str(id), output_file_name, screenshot_path, is_showroom_staff)
 	_report("ready", f"{id} -- guest can now be served")
 
 	with open(output_file_name, "rb") as video_file:
@@ -434,6 +447,13 @@ def _process_and_upload(file_name, audio_file_name, playthrough_id=None):
 	takeaway_id = video_response["data"]["id"]
 	_report("uploaded", takeaway_id)
 	takeaway_url = f"{MICROSITE_URL}/{EVENT_CODE}/{takeaway_id}"
+	# The microsite has no access to our database, so the staff flag rides in the
+	# URL itself: cadi-curator-app.js reads ?staff=1 and skips Mixpanel entirely.
+	# Appended here rather than at either use site because this one string feeds
+	# BOTH the QR image below and microsite_url in the late write -- so the code
+	# the guest scans and the link we store can never disagree.
+	if is_showroom_staff:
+		takeaway_url = f"{takeaway_url}?staff=1"
 	qrcode = segno.make_qr(takeaway_url)
 	qrcode.save(qrcode_file_name, scale=20, border=2)
 	_report("qrcode", qrcode_file_name)
@@ -462,6 +482,9 @@ def Setup(tmClientExt: object) -> object:
 	movie = op.upload_control.par.Filepath.eval()
 	playthrough_id = op.operator_bridge.par.Currentplaythroughid.eval()
 	audio_file = op.upload_control.par.Audiofilepath.eval()
+	# Stashed by operator_bridge from the Operator app's checkbox. Rides the same
+	# main-thread-read / plain-data-out path as the playthrough id.
+	is_showroom_staff = bool(op.operator_bridge.par.Isshowroomstaff.eval())
 
 	# Main thread, so touching op.upload_control here is fine -- and it's the only place
 	# the worker can be handed the queue, since RunInThread must not resolve operators.
@@ -469,7 +492,12 @@ def Setup(tmClientExt: object) -> object:
 	_PROGRESS = op.upload_control.GetProgressQueue()
 	_report("queued", movie)
 
-	return {"file_name": movie, "audio_file_name": audio_file, "playthrough_id": playthrough_id or None}
+	return {
+		"file_name": movie,
+		"audio_file_name": audio_file,
+		"playthrough_id": playthrough_id or None,
+		"is_showroom_staff": is_showroom_staff,
+	}
 
 
 def RunInThread(tmClientExt: object, payload: object) -> None:
@@ -478,7 +506,12 @@ def RunInThread(tmClientExt: object, payload: object) -> None:
 	(ffmpeg subprocess, HTTP upload, QR generation). Any raised exception is
 	caught by the ThreadManager and routed to OnExcept below.
 	"""
-	result = _process_and_upload(payload["file_name"], payload.get("audio_file_name"), payload.get("playthrough_id"))
+	result = _process_and_upload(
+		payload["file_name"],
+		payload.get("audio_file_name"),
+		payload.get("playthrough_id"),
+		payload.get("is_showroom_staff", False),
+	)
 	tmClientExt.clientQueueManager.SetSuccessPayload(result)
 
 

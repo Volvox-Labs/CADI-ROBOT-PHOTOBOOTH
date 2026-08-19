@@ -66,14 +66,24 @@ class OperatorBridgeEXT(BaseEXT):
             # takeaway id, instead of that script minting its own uuid. Single
             # par because only one playthrough is ever in flight at a time.
             self.Me.par.Currentplaythroughid = message.get("playthroughId") or ""
+            # Showroom staff runs are excluded from analytics everywhere -- here,
+            # in the kiosk, and on the microsite. Read with a plain get() so an
+            # Operator app on an older build (no such key) falls back to False,
+            # i.e. treated as a guest and tracked exactly as it is today.
+            is_showroom_staff = bool(message.get("isShowroomStaff"))
+            self.Me.par.Isshowroomstaff = is_showroom_staff
             op.state_manager.par.Startphotobooth.pulse()
-            op.analytics_control.Send_mixpanel_event("Photo Booth Start")
+            if not is_showroom_staff:
+                op.analytics_control.Send_mixpanel_event("Photo Booth Start")
         elif message.get("type") == "estop":
             op.state_manager.par.Stopphotobooth.pulse()
         elif message.get("type") == "home_robot":
             op.state_manager.HomeRobot()
         elif message.get("type") == "complete_capture":
-            op.analytics_control.Send_mixpanel_event("Capture Complete")
+            # complete_capture carries no payload, so the flag has to come from the
+            # par stashed at capture time rather than from the message.
+            if not self.Me.par.Isshowroomstaff.eval():
+                op.analytics_control.Send_mixpanel_event("Capture Complete")
 
         pass
 
@@ -140,12 +150,18 @@ class OperatorBridgeEXT(BaseEXT):
         got_operator_heartbeat.readOnly = True
         current_playthrough_id = ParTemplate("CurrentPlaythroughId", par_type='Str', label='Current Playthrough Id')
         current_playthrough_id.readOnly = True
+        # Set from the Operator app's "Guest is showroom staff" checkbox. Read back
+        # by upload_control_thread_manager_callbacks.Setup() so it reaches Postgres
+        # and the QR URL. Same single-par-per-playthrough assumption as the id above.
+        is_showroom_staff = ParTemplate("IsShowroomStaff", par_type='Toggle', label='Is Showroom Staff')
+        is_showroom_staff.readOnly = True
         pars = [
             status_par,
             current_client_par,
             operator_connected,
             got_operator_heartbeat,
-            current_playthrough_id
+            current_playthrough_id,
+            is_showroom_staff
         ]
         for par in pars:
             par.createPar(page)
