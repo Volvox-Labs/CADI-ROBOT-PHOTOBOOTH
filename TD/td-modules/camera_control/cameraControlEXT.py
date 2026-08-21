@@ -56,7 +56,9 @@ class CameraControlEXT(BaseEXT):
         pass
 
     def _onStartcountdown(self):
-        self.Me.op("CountDownTimer").par.start.pulse()
+        # self.Me.op("CountDownTimer").par.start.pulse()
+        # print("Disabled")
+        pass
 
 
     def _createControlsPage(self) -> None:

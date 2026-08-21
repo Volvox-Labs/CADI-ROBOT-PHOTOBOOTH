@@ -18,30 +18,71 @@ class OperatorBridgeEXT(BaseEXT):
         BaseEXT.__init__(self, myop, par_callback_on=True)
         self._createControlsPage()
         self.Me.par.opshortcut = 'operator_bridge'
-        self.ws_client = self.Me.par.Currentclient
-        if self.ws_client:
-            self.Me.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"startup","message": "connected"}))
-        
+        # No cached client here on purpose -- see _send(). This used to hold
+        # self.Me.par.Currentclient, which is the *parameter object*, not the
+        # client id string, and was captured once at init and never refreshed.
+        self._send({"task": "startup", "message": "connected"})
+
         pass
 
     def OnInit(self):
         # return False if initialization fails
         return True
 
+    def _send(self, payload, server_op=None):
+        """Send a JSON message to the currently-connected operator client.
+
+        Resolves the client id from the parameter on every call instead of
+        caching one. A cached client goes stale the instant the app reconnects --
+        and the app reconnects on every page refresh -- after which every send
+        addresses a socket that no longer exists.
+
+        Failures are logged and swallowed deliberately. HandleNewClient sends
+        from inside the websocket *open* callback, so an exception raised here
+        propagates out of onWebSocketOpen and TouchDesigner aborts the
+        handshake: the client connects and disconnects in the same frame, which
+        is exactly the symptom this fixes. A send failing is a normal race (the
+        client can vanish between frames) and must never be able to drop a
+        connection.
+
+        Returns True if the message was handed to the DAT.
+        """
+        client = self.Me.par.Currentclient.eval()
+        if not client:
+            self.Logger.debug(f"No operator client connected; dropped {payload.get('task')!r}")
+            return False
+
+        server = server_op if server_op is not None else self.Me.op("webserver1")
+        try:
+            server.webSocketSendText(client, json.dumps(payload))
+            return True
+        except Exception as exc:  # pylint: disable=broad-except
+            # Broad on purpose: whatever TD raises for an unknown/closed client,
+            # the connection matters more than the message.
+            self.Logger.debug(f"Send to {client} failed ({exc}); dropped {payload.get('task')!r}")
+            return False
+
     def HandleNewClient(self,client):
+        self.Logger.debug(f"Got a new Client!: {client}")
         self.Me.par.Currentclient = client
         self.UpdateState(op.state_manager.par.State.eval())
         pass
     
     def HandleDisconnect(self, client):
         self.Logger.debug(f"Client disconnected: {client}")
-        self.Me.par.Currentclient = ""
+        # Only clear if the client that left is the one we're holding. On iOS a
+        # refresh leaves the old socket half-open while the replacement is
+        # already connecting, so disconnects routinely arrive AFTER the new
+        # client has been registered -- an unconditional clear would wipe the
+        # live client and leave us unable to send to anyone.
+        if client == self.Me.par.Currentclient.eval():
+            self.Me.par.Currentclient = ""
         pass
 
     def HandleOperatorHealthCheck(self):
         self.Me.par.Gotoperatorheartbeat = False
         self.Me.op("heartbeat_wait").par.start.pulse()
-        self.Me.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"heartbeat", "message": "connected"}))
+        self._send({"task": "heartbeat", "message": "connected"})
         pass
     
     def HandleOperatorHealthcheckTimeout(self):
@@ -100,17 +141,27 @@ class OperatorBridgeEXT(BaseEXT):
         pass
     
     def HandleRobotCycleComplete(self):
-        self.Me.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"status", "message": "robot_cycle_completed"}))
+        self._send({"task": "status", "message": "robot_cycle_completed"})
 
 
     def UpdateState(self,state_val):
-        self.Me.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"status", "message": state_val}))
+        # Called from HandleNewClient, i.e. from inside the websocket open
+        # callback -- which is why _send() must never raise. See _send().
+        self._send({"task": "status", "message": state_val})
 
 
     def HandleUploaderHealthCheck(self):
         self.Me.par.Gotuploaderheartbeat = False
+        # NOTE: shares heartbeat_wait with HandleOperatorHealthCheck, so the two
+        # healthchecks overwrite each other's timeout window. Left as-is because
+        # splitting them needs a second timer inside the .tox.
         self.Me.op("heartbeat_wait").par.start.pulse()
-        op.upload_control.op("webserver1").webSocketSendText(self.ws_client,json.dumps({"task":"heartbeat", "message": "connected"}))
+        # KNOWN BROKEN, now failing quietly instead of raising: this addresses
+        # upload_control's webserver DAT but with the *operator's* client id, and
+        # a client id from one Web Server DAT means nothing to another. It needs
+        # upload_control to expose its own connected client before it can work.
+        self._send({"task": "heartbeat", "message": "connected"},
+                   server_op=op.upload_control.op("webserver1"))
         pass
     
     def HandleUploaderHealthcheckTimeout(self):

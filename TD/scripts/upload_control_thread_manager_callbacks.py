@@ -14,7 +14,9 @@ BASE_URL = "https://ingest.curatorlive.com/upload"
 # runs as a native Windows process outside the compose network, so it has to
 # go through the same published port everyone else does.
 POSTGREST_URL = root.var("postgrest_url")
-MICROSITE_URL = "https://share.curatorlive.com/"
+# default 
+# MICROSITE_URL = "https://share.curatorlive.com/"
+MICROSITE_URL = "https://www.usopenarrival.com/"
 EVENT_CODE = "QFSVY8"
 FFMPEG_PATH = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"
 FFPROBE_PATH = FFMPEG_PATH.replace("ffmpeg.exe", "ffprobe.exe")
